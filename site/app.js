@@ -298,6 +298,13 @@
     return Boolean(ble.device?.gatt?.connected && ble.control && ble.data && ble.statusCharacteristic);
   }
 
+  function withTimeout(promise, timeoutMs, message) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(message)), timeoutMs))
+    ]);
+  }
+
   function parseStatus(dataView) {
     if (!dataView || dataView.byteLength < 12) return;
     ble.status = {
@@ -352,25 +359,45 @@
     elements['connect-button'].disabled = true;
     setStatus('Choose EPHOTO-648 in the Bluetooth prompt…', 0);
     try {
-      const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: 'EPHOTO-648' }],
+        optionalServices: [SERVICE_UUID]
+      });
       ble.device = device;
       device.addEventListener('gattserverdisconnected', onDisconnected);
       elements['device-name'].textContent = device.name || 'EPHOTO-648';
       elements['device-detail'].textContent = 'Opening Bluetooth link…';
-      ble.server = await device.gatt.connect();
-      elements['device-detail'].textContent = 'Discovering photo service…';
-      const service = await ble.server.getPrimaryService(SERVICE_UUID);
-      ble.control = await service.getCharacteristic(CONTROL_UUID);
-      ble.data = await service.getCharacteristic(DATA_UUID);
-      ble.statusCharacteristic = await service.getCharacteristic(STATUS_UUID);
+      ble.server = await withTimeout(device.gatt.connect(), 10000, 'Bluetooth link timed out');
+      elements['device-detail'].textContent = 'Finding photo service…';
+      const service = await withTimeout(
+        ble.server.getPrimaryService(SERVICE_UUID), 10000, 'Photo service discovery timed out'
+      );
+      elements['device-detail'].textContent = 'Finding control channel…';
+      ble.control = await withTimeout(
+        service.getCharacteristic(CONTROL_UUID), 10000, 'Control channel discovery timed out'
+      );
+      elements['device-detail'].textContent = 'Finding data channel…';
+      ble.data = await withTimeout(
+        service.getCharacteristic(DATA_UUID), 10000, 'Data channel discovery timed out'
+      );
+      elements['device-detail'].textContent = 'Finding status channel…';
+      ble.statusCharacteristic = await withTimeout(
+        service.getCharacteristic(STATUS_UUID), 10000, 'Status channel discovery timed out'
+      );
+      elements['device-detail'].textContent = 'Starting status updates…';
       try {
-        await ble.statusCharacteristic.startNotifications();
+        await withTimeout(
+          ble.statusCharacteristic.startNotifications(), 4000, 'Notifications unavailable'
+        );
         ble.statusCharacteristic.addEventListener('characteristicvaluechanged', onStatusChanged);
         ble.notifications = true;
       } catch (_) {
         ble.notifications = false;
       }
-      parseStatus(await ble.statusCharacteristic.readValue());
+      elements['device-detail'].textContent = 'Reading tag status…';
+      parseStatus(await withTimeout(
+        ble.statusCharacteristic.readValue(), 5000, 'Initial status read timed out'
+      ));
       elements['device-detail'].textContent = ble.notifications
         ? 'Connected and ready'
         : 'Connected and ready (polling status)';
