@@ -8,6 +8,7 @@
 #include "ble_hci.h"
 #include "ble_srv_common.h"
 #include "nrf.h"
+#include "nrf_gpio.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
 #include "nrf_soc.h"
@@ -22,6 +23,8 @@
 #define PROTOCOL_VERSION 1u
 #define ADV_INTERVAL 160u /* 100 ms in 0.625 ms units. */
 #define ADV_DURATION 6000u /* 60 seconds in 10 ms units. */
+#define WAKE_BUTTON_1 28u
+#define WAKE_BUTTON_2 29u
 
 #define PHOTO_UUID_SERVICE 0x0000u
 #define PHOTO_UUID_CONTROL 0x0001u
@@ -68,6 +71,21 @@ static uint32_t m_running_crc = 0xFFFFFFFFu;
 static volatile bool m_prepare_pending;
 static volatile bool m_finish_pending;
 static volatile bool m_abort_pending;
+static volatile bool m_disconnect_pending;
+static volatile bool m_system_off_pending;
+static bool m_shutdown_after_disconnect;
+
+static void enter_system_off(void) {
+    nrf_gpio_cfg_sense_input(WAKE_BUTTON_1,
+                             NRF_GPIO_PIN_PULLUP,
+                             NRF_GPIO_PIN_SENSE_LOW);
+    nrf_gpio_cfg_sense_input(WAKE_BUTTON_2,
+                             NRF_GPIO_PIN_PULLUP,
+                             NRF_GPIO_PIN_SENSE_LOW);
+    (void)sd_power_system_off();
+    for (;;) {
+    }
+}
 
 static uint32_t read_le32(uint8_t const *data) {
     return (uint32_t)data[0] |
@@ -332,12 +350,24 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
         case BLE_GAP_EVT_DISCONNECTED:
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
             m_status_notifications = false;
+            m_disconnect_pending = false;
+            if (m_shutdown_after_disconnect) {
+                m_shutdown_after_disconnect = false;
+                m_system_off_pending = true;
+                break;
+            }
             m_state = STATE_IDLE;
             m_error = ERROR_NONE;
             m_expected_offset = 0;
             m_running_crc = 0xFFFFFFFFu;
             m_abort_pending = true;
             advertising_start();
+            break;
+
+        case BLE_GAP_EVT_ADV_SET_TERMINATED:
+            if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
+                m_system_off_pending = true;
+            }
             break;
 
         case BLE_GATTS_EVT_WRITE: {
@@ -373,6 +403,16 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
             APP_ERROR_CHECK(sd_ble_gatts_sys_attr_set(m_conn_handle, NULL, 0, 0));
             break;
 
+        case BLE_GATTS_EVT_HVN_TX_COMPLETE:
+            if (m_disconnect_pending && m_conn_handle != BLE_CONN_HANDLE_INVALID) {
+                m_disconnect_pending = false;
+                m_shutdown_after_disconnect = true;
+                APP_ERROR_CHECK(sd_ble_gap_disconnect(
+                    m_conn_handle,
+                    BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION));
+            }
+            break;
+
         case BLE_GATTC_EVT_TIMEOUT:
         case BLE_GATTS_EVT_TIMEOUT:
             APP_ERROR_CHECK(sd_ble_gap_disconnect(m_conn_handle,
@@ -391,6 +431,9 @@ void assert_nrf_callback(uint16_t line_num, uint8_t const *file_name) {
 }
 
 int main(void) {
+    nrf_gpio_cfg_input(WAKE_BUTTON_1, NRF_GPIO_PIN_PULLUP);
+    nrf_gpio_cfg_input(WAKE_BUTTON_2, NRF_GPIO_PIN_PULLUP);
+
     APP_ERROR_CHECK(nrf_sdh_enable_request());
     uint32_t ram_start = 0;
     APP_ERROR_CHECK(nrf_sdh_ble_default_cfg_set(APP_BLE_CONN_CFG_TAG, &ram_start));
@@ -420,9 +463,25 @@ int main(void) {
             if (panel_finish_stream()) {
                 m_state = STATE_COMPLETE;
                 status_publish();
+                if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
+                    if (m_status_notifications) {
+                        m_disconnect_pending = true;
+                    } else {
+                        m_shutdown_after_disconnect = true;
+                        APP_ERROR_CHECK(sd_ble_gap_disconnect(
+                            m_conn_handle,
+                            BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION));
+                    }
+                } else {
+                    m_system_off_pending = true;
+                }
             } else {
                 fail(ERROR_PANEL_TIMEOUT);
             }
+        }
+        if (m_system_off_pending) {
+            m_system_off_pending = false;
+            enter_system_off();
         }
         APP_ERROR_CHECK(sd_app_evt_wait());
     }

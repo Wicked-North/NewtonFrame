@@ -1,6 +1,6 @@
 # BLE Photo Transfer Protocol
 
-Status: design for the ESP32-free nRF52811 photo viewer. It is not yet flashed to the tag.
+Status: experimental implementation for the ESP32-free nRF52811 photo viewer. Advertising and GATT connection are verified on the tag; full image transfer and refresh testing are still in progress.
 
 ## Responsibility split
 
@@ -135,7 +135,7 @@ The existing JavaScript converter can be reused. Only its transport changes from
 
 ## Power and wake behavior
 
-The BLE firmware should configure both P0.28 and P0.29 as active-low sense inputs until continuity testing identifies the populated switch. On power-up or button wake it advertises for a bounded interval, then returns to System OFF. A connected transfer keeps the system awake. The display is powered only after START and is shut down on completion, error, disconnect, or timeout.
+The BLE firmware configures both P0.28 and P0.29 as active-low sense inputs before System OFF, until continuity testing identifies the populated switch. On power-up or button wake it advertises for 60 seconds, then returns to System OFF. A connected transfer keeps the system awake. After a successful refresh, the tag reports COMPLETE, disconnects, and returns to System OFF. The display is powered only after START and is shut down on completion, error, disconnect, or timeout.
 
 ## Safe migration
 

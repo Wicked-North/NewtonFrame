@@ -10,7 +10,10 @@ Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 - Validates image dimensions, format, offsets, length, and CRC-32.
 - Streams accepted image bytes directly into UC8159 display RAM.
 - Refreshes only after a valid COMMIT and matching CRC.
-- Has not yet been flashed or tested on the physical tag.
+- Advertises for 60 seconds, then enters System OFF.
+- Wakes and advertises again when either active-low button candidate P0.28 or P0.29 is pressed.
+- Disconnects and enters System OFF after a successful display refresh.
+- Initial hardware bring-up has verified S112 startup, advertising, and GATT connection on the physical tag. A complete image transfer and panel refresh remain experimental.
 
 ## Memory layout
 
@@ -18,7 +21,9 @@ Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 |---|---|
 | S112 MBR and SoftDevice | `0x00000000–0x00018FFF` |
 | BLE application | `0x00019000–0x0002FFFF` |
-| Application RAM | `0x20001A40–0x20005FFF` |
+| Application RAM | `0x20001AE0–0x20005FFF` |
+
+The build uses the calibrated internal RC low-frequency clock because the tag does not provide the development kit's external 32.768 kHz crystal.
 
 The image is not stored in internal flash. The display is bistable and retains the last successfully refreshed image without power.
 

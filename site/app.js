@@ -69,6 +69,7 @@
     control: null,
     data: null,
     statusCharacteristic: null,
+    notifications: false,
     status: { version: 0, state: 0, error: 0, offset: 0, crc: 0 },
     waiters: new Set(),
     transferring: false,
@@ -316,10 +317,12 @@
   }
 
   function onDisconnected() {
+    const completed = ble.status.state === 5;
     ble.server = null;
     ble.control = null;
     ble.data = null;
     ble.statusCharacteristic = null;
+    ble.notifications = false;
     ble.transferring = false;
     elements['device-name'].textContent = 'No tag connected';
     elements['device-detail'].textContent = 'Wake your tag, then connect';
@@ -328,7 +331,11 @@
     elements['send-button'].disabled = true;
     elements['cancel-button'].hidden = true;
     for (const notify of [...ble.waiters]) notify();
-    if (!ble.cancelled) setStatus('Tag disconnected', null);
+    if (completed) {
+      setStatus('Done — your new picture is on the frame', 100);
+    } else if (!ble.cancelled) {
+      setStatus('Tag disconnected', null);
+    }
   }
 
   async function connectTag() {
@@ -348,24 +355,41 @@
       const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
       ble.device = device;
       device.addEventListener('gattserverdisconnected', onDisconnected);
+      elements['device-name'].textContent = device.name || 'EPHOTO-648';
+      elements['device-detail'].textContent = 'Opening Bluetooth link…';
       ble.server = await device.gatt.connect();
+      elements['device-detail'].textContent = 'Discovering photo service…';
       const service = await ble.server.getPrimaryService(SERVICE_UUID);
       ble.control = await service.getCharacteristic(CONTROL_UUID);
       ble.data = await service.getCharacteristic(DATA_UUID);
       ble.statusCharacteristic = await service.getCharacteristic(STATUS_UUID);
-      await ble.statusCharacteristic.startNotifications();
-      ble.statusCharacteristic.addEventListener('characteristicvaluechanged', onStatusChanged);
+      try {
+        await ble.statusCharacteristic.startNotifications();
+        ble.statusCharacteristic.addEventListener('characteristicvaluechanged', onStatusChanged);
+        ble.notifications = true;
+      } catch (_) {
+        ble.notifications = false;
+      }
       parseStatus(await ble.statusCharacteristic.readValue());
-      elements['device-name'].textContent = device.name || 'EPHOTO-648';
-      elements['device-detail'].textContent = 'Connected and ready';
+      elements['device-detail'].textContent = ble.notifications
+        ? 'Connected and ready'
+        : 'Connected and ready (polling status)';
       elements['connect-button'].textContent = 'Disconnect';
       elements['connect-button'].disabled = false;
       elements['send-button'].disabled = !editor.packed;
       setStatus(editor.packed ? 'Image ready to send' : 'Connected — convert an image', editor.packed ? 100 : 0);
     } catch (error) {
+      if (ble.device?.gatt?.connected) ble.device.gatt.disconnect();
+      ble.server = null;
+      ble.control = null;
+      ble.data = null;
+      ble.statusCharacteristic = null;
+      ble.notifications = false;
+      elements['device-name'].textContent = 'No tag connected';
+      elements['device-detail'].textContent = error.message || String(error);
       elements['connect-button'].disabled = false;
       if (error.name !== 'NotFoundError') showToast(error.message || String(error));
-      setStatus(error.name === 'NotFoundError' ? 'Connection cancelled' : 'Could not connect to tag', 0);
+      setStatus(error.name === 'NotFoundError' ? 'Connection cancelled' : `Connection failed: ${error.message || error}`, 0);
     }
   }
 
@@ -384,29 +408,46 @@
     if (ble.status.state === 255) return Promise.reject(transferError());
     if (predicate(ble.status)) return Promise.resolve(ble.status);
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      let polling = false;
+      const cleanup = () => {
+        clearTimeout(timeout);
+        clearInterval(poll);
         ble.waiters.delete(check);
+      };
+      const timeout = setTimeout(() => {
+        cleanup();
         reject(new Error('Timed out waiting for the tag. Wake it and try again.'));
       }, timeoutMs);
       const check = () => {
         if (ble.cancelled) {
-          clearTimeout(timeout);
-          ble.waiters.delete(check);
+          cleanup();
           reject(new DOMException('Transfer cancelled', 'AbortError'));
         } else if (!isConnected()) {
-          clearTimeout(timeout);
-          ble.waiters.delete(check);
+          cleanup();
           reject(new Error('The tag disconnected.'));
         } else if (ble.status.state === 255) {
-          clearTimeout(timeout);
-          ble.waiters.delete(check);
+          cleanup();
           reject(transferError());
         } else if (predicate(ble.status)) {
-          clearTimeout(timeout);
-          ble.waiters.delete(check);
+          cleanup();
           resolve(ble.status);
         }
       };
+      const poll = setInterval(async () => {
+        if (polling || !isConnected()) {
+          check();
+          return;
+        }
+        polling = true;
+        try {
+          parseStatus(await ble.statusCharacteristic.readValue());
+        } catch (_) {
+          // The connection check below reports a disconnect; transient read errors retry.
+        } finally {
+          polling = false;
+          check();
+        }
+      }, ble.notifications ? 1000 : 250);
       ble.waiters.add(check);
     });
   }
