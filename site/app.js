@@ -368,10 +368,12 @@
       elements['device-name'].textContent = device.name || 'EPHOTO-648';
       elements['device-detail'].textContent = 'Opening Bluetooth link…';
       ble.server = await withTimeout(device.gatt.connect(), 10000, 'Bluetooth link timed out');
-      elements['device-detail'].textContent = 'Finding photo service…';
-      const service = await withTimeout(
-        ble.server.getPrimaryService(SERVICE_UUID), 10000, 'Photo service discovery timed out'
+      elements['device-detail'].textContent = 'Enumerating GATT services…';
+      const services = await withTimeout(
+        ble.server.getPrimaryServices(), 12000, 'GATT service enumeration timed out'
       );
+      const service = services.find(item => item.uuid.toLowerCase() === SERVICE_UUID);
+      if (!service) throw new Error('The tag connected but did not expose the photo service');
       elements['device-detail'].textContent = 'Finding control channel…';
       ble.control = await withTimeout(
         service.getCharacteristic(CONTROL_UUID), 10000, 'Control channel discovery timed out'
