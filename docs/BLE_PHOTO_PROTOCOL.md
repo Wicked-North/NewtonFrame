@@ -1,6 +1,6 @@
 # BLE Photo Transfer Protocol
 
-Status: hardware-verified implementation for the ESP32-free nRF52811 photo viewer. Advertising, GATT connection, full image transfer, CRC validation, panel refresh, intentional disconnect, and post-transfer sleep have been verified on the tag.
+Status: hardware-verified implementation for the ESP32-free nRF52811 photo viewer. Advertising, GATT connection, full image transfer, CRC validation, panel refresh, intentional disconnect, post-transfer System OFF, and physical-button wake have been verified on the tag.
 
 ## Responsibility split
 
