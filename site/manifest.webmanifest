@@ -1,0 +1,18 @@
+{
+  "name": "NewtonFrame Studio",
+  "short_name": "NewtonFrame",
+  "description": "Prepare and send four-color photos to a NewtonFrame e-paper tag.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f0df",
+  "theme_color": "#171612",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

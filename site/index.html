@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171612">
+  <meta name="description" content="Prepare and send four-color photos to a NewtonFrame e-paper tag over Bluetooth.">
+  <title>NewtonFrame Studio</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="NewtonFrame Studio home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span><strong>NewtonFrame</strong><small>Studio</small></span>
+    </a>
+    <div class="header-state">
+      <span id="browser-badge" class="badge"><i></i><span>Checking Bluetooth</span></span>
+      <button id="install-button" class="button button-quiet compact" type="button" hidden>Install app</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <p class="eyebrow">Four colors. No cloud.</p>
+      <h1 id="page-title">Make the picture<br><em>fit the paper.</em></h1>
+      <p class="hero-copy">Crop, tune, dither, and send a photograph directly to your 6-inch Newton tag. Every pixel stays on this device.</p>
+      <div class="spec-row" aria-label="Panel specifications">
+        <span><b>648 × 480</b> pixels</span>
+        <span><b>4</b> pigments</span>
+        <span><b>77,760</b> bytes</span>
+      </div>
+    </section>
+
+    <div id="compatibility" class="notice" hidden role="status">
+      <strong>Bluetooth is not available in this browser.</strong>
+      <span>On iPhone, open this page in Bluefy. Safari does not support Web Bluetooth. You can still convert and download images here.</span>
+    </div>
+
+    <section class="workspace" aria-label="Photo editor">
+      <div class="panel preview-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">01</span>
+            <h2>Frame</h2>
+          </div>
+          <div class="file-actions">
+            <span id="image-name" class="file-name">No image selected</span>
+            <label id="change-image" class="text-button" for="image-input" hidden>Change</label>
+          </div>
+        </div>
+
+        <input id="image-input" class="visually-hidden" type="file" accept="image/*">
+        <label id="drop-zone" class="drop-zone" for="image-input">
+          <span class="drop-icon" aria-hidden="true">+</span>
+          <strong>Choose a photograph</strong>
+          <small>Tap to browse or drop an image here</small>
+        </label>
+
+        <div id="canvas-shell" class="canvas-shell" hidden>
+          <canvas id="preview" width="648" height="480" aria-label="E-paper image preview"></canvas>
+          <div id="canvas-overlay" class="canvas-overlay">Preview</div>
+        </div>
+
+        <p class="drag-hint" id="drag-hint" hidden>Drag the picture to reframe it</p>
+      </div>
+
+      <div class="panel controls-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">02</span>
+            <h2>Tune</h2>
+          </div>
+          <button id="reset-button" class="text-button" type="button" disabled>Reset</button>
+        </div>
+
+        <fieldset>
+          <legend>Framing</legend>
+          <div class="segmented" role="group" aria-label="Image fit">
+            <button type="button" data-fit="cover" class="active" aria-pressed="true">Fill</button>
+            <button type="button" data-fit="contain" aria-pressed="false">Fit</button>
+          </div>
+          <label class="range-row" for="zoom">
+            <span>Zoom <output id="zoom-value">100%</output></span>
+            <input id="zoom" type="range" min="100" max="250" value="100" step="1" disabled>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Orientation</legend>
+          <div class="control-grid">
+            <label>Rotation
+              <select id="rotation" disabled>
+                <option value="0">0°</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+              </select>
+            </label>
+            <div class="toggle-pair" aria-label="Mirror controls">
+              <button id="flip-horizontal" class="icon-button" type="button" aria-pressed="false" disabled title="Mirror horizontally">↔ <span>Mirror H</span></button>
+              <button id="flip-vertical" class="icon-button" type="button" aria-pressed="false" disabled title="Mirror vertically">↕ <span>Mirror V</span></button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Ink palette</legend>
+          <div class="palette-grid">
+            <label class="color-choice black"><input type="checkbox" data-color="0" checked><span></span>Black</label>
+            <label class="color-choice paper"><input type="checkbox" data-color="1" checked><span></span>Paper</label>
+            <label class="color-choice yellow"><input type="checkbox" data-color="2" checked><span></span>Yellow</label>
+            <label class="color-choice red"><input type="checkbox" data-color="3" checked><span></span>Red</label>
+          </div>
+        </fieldset>
+
+        <label class="switch-row" for="dither">
+          <span><strong>Floyd–Steinberg dither</strong><small>Mix pigments for richer photographic detail</small></span>
+          <input id="dither" type="checkbox" checked disabled>
+          <i aria-hidden="true"></i>
+        </label>
+
+        <button id="convert-button" class="button button-primary full" type="button" disabled>
+          <span>Convert for e-paper</span><b aria-hidden="true">→</b>
+        </button>
+      </div>
+    </section>
+
+    <section class="panel send-panel" aria-labelledby="send-title">
+      <div class="panel-heading">
+        <div>
+          <span class="step">03</span>
+          <h2 id="send-title">Send</h2>
+        </div>
+        <span id="crc-label" class="mono">CRC —</span>
+      </div>
+
+      <div class="send-grid">
+        <div class="device-card">
+          <div class="device-icon" aria-hidden="true">
+            <span></span>
+          </div>
+          <div>
+            <strong id="device-name">No tag connected</strong>
+            <small id="device-detail">Wake your tag, then connect</small>
+          </div>
+          <button id="connect-button" class="button button-secondary" type="button">Connect tag</button>
+        </div>
+
+        <div class="transfer-card">
+          <div class="transfer-topline">
+            <span id="status-text">Convert an image to continue</span>
+            <b id="progress-label">0%</b>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="Transfer progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="progress-bar"></span>
+          </div>
+          <div class="action-row">
+            <button id="download-button" class="button button-quiet" type="button" disabled>Download .bin</button>
+            <button id="send-button" class="button button-primary" type="button" disabled>Send to frame</button>
+            <button id="cancel-button" class="button button-danger" type="button" hidden>Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <details class="transfer-details">
+        <summary>Transfer details</summary>
+        <dl>
+          <div><dt>Device state</dt><dd id="tag-state">Idle</dd></div>
+          <div><dt>Accepted</dt><dd id="accepted-offset">0 / 77,760 bytes</dd></div>
+          <div><dt>Protocol</dt><dd>NewtonFrame v1</dd></div>
+        </dl>
+      </details>
+    </section>
+
+    <section class="how-it-works" aria-labelledby="how-title">
+      <p class="eyebrow">From light to ink</p>
+      <h2 id="how-title">Your phone does the heavy lifting.</h2>
+      <div class="process-grid">
+        <article><b>1</b><h3>Compose</h3><p>Your image is cropped to the panel's exact aspect ratio.</p></article>
+        <article><b>2</b><h3>Quantize</h3><p>Pixels become black, paper, yellow, or red with optional error diffusion.</p></article>
+        <article><b>3</b><h3>Verify</h3><p>The frame checks all 77,760 bytes and their CRC before refreshing.</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>NewtonFrame Studio</span>
+    <span>Images never leave your device.</span>
+    <a href="https://github.com/Wicked-North/NewtonFrame">Source &amp; firmware</a>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>
