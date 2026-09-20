@@ -399,6 +399,12 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
             break;
         }
 
+        case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
+            APP_ERROR_CHECK(sd_ble_gatts_exchange_mtu_reply(
+                m_conn_handle,
+                BLE_GATT_ATT_MTU_DEFAULT));
+            break;
+
         case BLE_GATTS_EVT_SYS_ATTR_MISSING:
             APP_ERROR_CHECK(sd_ble_gatts_sys_attr_set(m_conn_handle, NULL, 0, 0));
             break;
