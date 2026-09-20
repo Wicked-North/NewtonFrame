@@ -28,7 +28,7 @@ The nRF52811 does not dither. Its 24 KB RAM is deliberately reserved for BLE and
 
 ## Radio implementation notes
 
-Nordic specifies Bluetooth LE modes at 2 Mbps, 1 Mbps, 500 kbps, and 125 kbps for the nRF52811, with approximately 4.6 mA peak current in both 0 dBm TX and RX. The firmware lets S112 negotiate the PHY automatically; it does not access `NRF_RADIO` directly because the SoftDevice owns the radio peripheral, packet DMA, timing, and radio interrupts while enabled. The conservative first build uses ATT MTU 23 and 16 image bytes per protocol packet, so it remains valid even if a phone does not negotiate a larger MTU or 2 Mbps PHY.
+Nordic specifies Bluetooth LE modes at 2 Mbps, 1 Mbps, 500 kbps, and 125 kbps for the nRF52811, with approximately 4.6 mA peak current in both 0 dBm TX and RX. The firmware lets S112 negotiate the PHY automatically; it does not access `NRF_RADIO` directly because the SoftDevice owns the radio peripheral, packet DMA, timing, and radio interrupts while enabled. The current iPhone-focused build negotiates an ATT MTU up to 185 and sends 176 image bytes per protocol packet.
 
 ### Tag
 
@@ -92,8 +92,7 @@ Each Data write contains:
 
 The offset must equal the tag's next expected offset. Duplicate or skipped offsets are rejected. Payload size is selected from the negotiated ATT MTU:
 
-- ATT MTU 23 fallback: 16 image bytes per write.
-- ATT MTU 247: up to 240 image bytes per write.
+- ATT MTU 185: 176 image bytes per write (180-byte characteristic value including the offset).
 
 The sender uses Write Without Response for image data, pauses every 256 image bytes for a Status acknowledgement, and resumes from the accepted offset. This keeps the radio pipeline moving without sacrificing explicit flow control on phones/browsers whose transmit queues differ.
 

@@ -8,8 +8,8 @@
   const CONTROL_UUID = '7b1e0001-6e8a-4f4b-a2b7-2c648480e001';
   const DATA_UUID = '7b1e0002-6e8a-4f4b-a2b7-2c648480e001';
   const STATUS_UUID = '7b1e0003-6e8a-4f4b-a2b7-2c648480e001';
-  const CHUNK_BYTES = 16;
-  const ACK_INTERVAL = 256;
+  const CHUNK_BYTES = 176;
+  const ACK_INTERVAL = 2816;
 
   const COLORS = [
     { code: 0, name: 'Black', rgb: [23, 23, 23] },
