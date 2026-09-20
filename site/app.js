@@ -427,6 +427,11 @@
     return characteristic.writeValue(value);
   }
 
+  function writeWithoutResponse(characteristic, value) {
+    if (characteristic.writeValueWithoutResponse) return characteristic.writeValueWithoutResponse(value);
+    return writeWithResponse(characteristic, value);
+  }
+
   function transferError() {
     const detail = ERROR_NAMES[ble.status.error] || `Tag error ${ble.status.error}`;
     return new Error(`${detail} at byte ${ble.status.offset.toLocaleString()}`);
@@ -518,17 +523,20 @@
       await writeWithResponse(ble.control, start);
       await waitForStatus(status => status.state === 2 && status.offset === 0, 15000);
 
+      const transferStarted = performance.now();
       for (let offset = 0; offset < FRAME_BYTES; offset += CHUNK_BYTES) {
         if (ble.cancelled) throw new DOMException('Transfer cancelled', 'AbortError');
         const count = Math.min(CHUNK_BYTES, FRAME_BYTES - offset);
         const packet = new Uint8Array(4 + count);
         new DataView(packet.buffer).setUint32(0, offset, true);
         packet.set(editor.packed.subarray(offset, offset + count), 4);
-        await writeWithResponse(ble.data, packet);
+        await writeWithoutResponse(ble.data, packet);
         const nextOffset = offset + count;
         if (nextOffset % ACK_INTERVAL === 0 || nextOffset === FRAME_BYTES) {
           await waitForStatus(status => status.state === 2 && status.offset >= nextOffset, 8000);
-          setStatus(`Sending ${nextOffset.toLocaleString()} of ${FRAME_BYTES.toLocaleString()} bytes…`, nextOffset * 100 / FRAME_BYTES);
+          const elapsedSeconds = Math.max((performance.now() - transferStarted) / 1000, 0.001);
+          const kibPerSecond = nextOffset / elapsedSeconds / 1024;
+          setStatus(`Sending ${nextOffset.toLocaleString()} of ${FRAME_BYTES.toLocaleString()} bytes · ${kibPerSecond.toFixed(1)} KiB/s`, nextOffset * 100 / FRAME_BYTES);
         }
       }
 

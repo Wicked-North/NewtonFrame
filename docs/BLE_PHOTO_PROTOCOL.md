@@ -95,7 +95,7 @@ The offset must equal the tag's next expected offset. Duplicate or skipped offse
 - ATT MTU 23 fallback: 16 image bytes per write.
 - ATT MTU 247: up to 240 image bytes per write.
 
-The sender pauses periodically for a Status notification and resumes from the acknowledged offset. This explicit flow control prevents overrun on phones/browsers whose Write Without Response queue behavior differs.
+The sender uses Write Without Response for image data, pauses every 256 image bytes for a Status acknowledgement, and resumes from the accepted offset. This keeps the radio pipeline moving without sacrificing explicit flow control on phones/browsers whose transmit queues differ.
 
 ## Status message
 
