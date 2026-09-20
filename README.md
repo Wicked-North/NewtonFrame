@@ -1,55 +1,70 @@
-# ESP32 SWD Flasher for nRF52
-This software makes it possible to Read and Write the internal Flash of the Nordic nRF52 series with an ESP32 using the SWD interface.
-A tool to exploit the APPROTECT vulnerability is included as well.
+# NewtonFrame
 
-### You can support my work via PayPal: https://paypal.me/hoverboard1 this keeps projects like this coming.
+NewtonFrame turns a SoluM/Newton M3 electronic shelf label into a 648×480 four-color photo frame. It combines a tested ESP32/SWD recovery and image-upload workflow with an experimental Bluetooth Low Energy receiver for the tag's onboard nRF52811.
 
-To flash an nRF52 connect the following:
-- nRF52 **SWDCLK** to ESP32 **GPIO 21**
-- nRF52 **SWDIO** to ESP32 **GPIO 19**
-- nRF52 **GND** to ESP32 **GND** to N-Channel MOSFET **GND** (Optional: O-scope **GND Clips**)
-- Then power the nRF52 as needed
+![NewtonFrame functional schematic](docs/nrf52811-functional-schematic.svg)
 
-To bypass the Readout protection (APPROTECT) of an nRF52 connect all of the above and the following:
-- nRF52 3.3V Power **VDD** to ESP32 **GPIO 22** (Optional: O-scope **Channel 2 Probe**)
-- N-Channel MOSFET **PWM+** to ESP32 **GPIO 5** (as shown)
-- N-Channel MOSFET **VOUT-** to nRF52 **DEC1** (as shown) (Optional: O-scope **Channel 1 Probe**)
-- Then power the nRF52 as needed
+## Project status
 
+| Component | Status |
+|---|---|
+| ESP32 SWD connection, unlock, and recovery | Tested on hardware |
+| Standalone nRF52811 Photo Viewer | Tested on hardware |
+| Browser conversion and ESP32 image upload | Tested end to end |
+| nRF52811 S112 BLE receiver | Builds; not yet flashed or hardware-tested |
+| Web Bluetooth upload | Implemented; awaits tag-side hardware validation |
 
-This repo is explained and demonstrated in these videos (click to watch):
+The BLE firmware is experimental. Keep a verified flash/UICR backup and the ESP32 SWD recovery connection available during bring-up.
 
+## Supported hardware
 
-[![YoutubeVideo](https://img.youtube.com/vi/tMPD0kBG_So/0.jpg)](https://www.youtube.com/watch?v=tMPD0kBG_So)
+- SoluM/Newton M3 tag with an nRF52811
+- `EL060H6W4A` 648×480 black/white/yellow/red e-paper panel
+- ESP32 development board for installation, recovery, and the tested uploader
+- 3.3 V logic and power only
 
+Panel data is packed at 2 bits per pixel, four pixels per byte, most-significant pair first: black `00`, white `01`, yellow `10`, and red `11`.
 
-[![YoutubeVideo](https://img.youtube.com/vi/Iu6RoXRZxOk/0.jpg)](https://www.youtube.com/watch?v=Iu6RoXRZxOk)
+## Repository layout
 
-### Required Hardware
+- [`data/index.htm`](data/index.htm) — mobile image converter, dithering, ESP32 upload, and Web Bluetooth uploader
+- [`src/`](src/) — ESP32 SWD programmer and HTTP service
+- [`Tag_Photo_Viewer/`](Tag_Photo_Viewer/) — tested standalone nRF52811 panel firmware
+- [`Tag_BLE_Photo_Viewer/`](Tag_BLE_Photo_Viewer/) — experimental S112 BLE receiver and panel driver
+- [`PHOTO_FRAME_MANUAL.md`](PHOTO_FRAME_MANUAL.md) — wiring, installation, use, recovery, and troubleshooting
+- [`docs/BLE_PHOTO_PROTOCOL.md`](docs/BLE_PHOTO_PROTOCOL.md) — GATT protocol and direct-to-panel streaming design
+- [`SoluM_ESP32_connections.md`](SoluM_ESP32_connections.md) — concise SWD wiring reference
+- `solum_*_test/` — direct-panel diagnostic sketches
 
-- ESP32 Development Board
-- N-Channel MOSFET Board
-- nRF52 Series Board
-- Optional: Oscilloscope
+## Tested ESP32 workflow
 
-### HowTo:
+1. Clone this repository recursively, or initialize its `Tag_FW_nRF52811` submodule after cloning.
+2. Read the [Photo Frame Manual](PHOTO_FRAME_MANUAL.md), especially its 3.3 V and backup warnings.
+3. Copy `include/wifi_credentials.example.h` to `include/wifi_credentials.h` and set local credentials. The copied file is ignored by Git. Leaving `WIFI_SSID` empty enables AP-only operation.
+4. Build the root project with PlatformIO and upload both firmware and the `data/` filesystem to the ESP32.
+5. Build and install [`Tag_Photo_Viewer`](Tag_Photo_Viewer/) on the nRF52811 through SWD.
+6. Open `http://swd.local/`, convert a photo, inspect the preview, and flash it to the tag.
 
-Use Visual Studio Code with PlatformIO to compile and upload the project.
+If station Wi-Fi is unavailable, the ESP32 starts the documented `SWD-Photo` fallback access point.
 
-Note: The Arduino IDE is not supported any more!
+## Experimental BLE workflow
 
-Change the WiFi credentials in Web.cpp and the Pinout to your needs in the platformio.ini file
+The BLE build uses Nordic nRF5 SDK 17.1.0 and S112 7.2.0. It advertises as `EPHOTO-648`, receives an offset-addressed 77,760-byte frame, validates CRC-32, and refreshes only after a valid COMMIT. Image bytes stream directly into UC8159 display RAM, avoiding a framebuffer in the nRF52811's limited RAM and flash.
 
-Upload the data/index.htm to the ESP32 via the ip-address/edit web editor 
+See [`Tag_BLE_Photo_Viewer/README.md`](Tag_BLE_Photo_Viewer/README.md) for build requirements and [`docs/BLE_PHOTO_PROTOCOL.md`](docs/BLE_PHOTO_PROTOCOL.md) for the wire protocol. On iPhone, Web Bluetooth requires a compatible browser such as Bluefy; Safari does not expose Web Bluetooth.
 
+Installing the combined S112/application image replaces the tested Photo Viewer layout. Do not flash the BLE application alone at `0x19000`, and do not test it without a recovery path.
 
+## Safety
 
-### ESP32 Glitcher schematic:
+- Never connect the tag to 5 V.
+- Preserve UICR and a known-good full-flash backup before erasing or replacing firmware.
+- Do not power the tag from multiple sources.
+- Do not run direct-display tests while the nRF52811 is also driving the panel.
+- Never publish `include/wifi_credentials.h` or other local secrets.
 
-<img width="800" alt="" src="https://github.com/atc1441/ESP32_nRF52_SWD/blob/main/ESP32_nRF_glitcher_schematic.jpg">
+## Credits and license
 
-#### nRF52832 Glitch Tip, way better results with these 2 caps removed
-<img width="800" alt="" src="https://github.com/atc1441/ESP32_nRF52_SWD/blob/main/nRF52832_glitchtip.jpg">
+The ESP32 SWD programmer is derived from [atc1441/ESP32_nRF52_SWD](https://github.com/atc1441/ESP32_nRF52_SWD). nRF52811 board research also used [OpenEPaperLink/Tag_FW_nRF52811](https://github.com/OpenEPaperLink/Tag_FW_nRF52811). Original copyright and SPDX notices are retained in source files.
 
-
-Credits go to LimitedResults for finding the Power glitching Exploit: https://limitedresults.com/2020/06/nrf52-debug-resurrection-approtect-bypass-part-2/
+NewtonFrame is distributed under the GNU General Public License v3.0; see [`LICENSE`](LICENSE).

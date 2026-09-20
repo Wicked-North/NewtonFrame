@@ -46,6 +46,72 @@
             padding: 0 0.5em;
             margin-left: 0.5em;
         }
+
+        .photo-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75em;
+            align-items: center;
+            margin-bottom: 1em;
+        }
+
+        .photo-controls label {
+            display: flex;
+            gap: 0.35em;
+            align-items: center;
+        }
+
+        #epaper_preview {
+            display: block;
+            width: min(100%, 648px);
+            height: auto;
+            border: 3px solid #333;
+            background: #f5f0d2;
+        }
+
+        .palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75em;
+            margin: 0.75em 0;
+        }
+
+        .swatch {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            border: 1px solid #555;
+            vertical-align: -0.15em;
+            margin-right: 0.25em;
+        }
+
+        .photo-status {
+            min-height: 1.5em;
+            font-weight: 500;
+        }
+
+        .warning {
+            color: #8a4b00;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                margin: 0;
+            }
+
+            header {
+                padding: 0 1em;
+            }
+
+            section {
+                margin: 1.5em 0.75em;
+            }
+
+            input, select, button {
+                min-height: 2.5em;
+                max-width: 100%;
+            }
+        }
     </style>
 </head>
 
@@ -56,6 +122,52 @@
         <p>nRF52 Flasher and Glitcher</p>
     </header>
     Copyright (c) 2021 Aaron Christophel ATCnetz.de
+    <section>
+        <h2>E-paper Photo</h2>
+        <p>Select an image from your phone. Conversion happens locally in Safari; the photo is not uploaded anywhere.</p>
+        <div class="photo-controls">
+            <input type="file" id="epaper_file" accept="image/*">
+            <label>Fit
+                <select id="epaper_fit">
+                    <option value="cover">Crop to fill</option>
+                    <option value="contain">Fit entire image</option>
+                </select>
+            </label>
+            <label>Rotate
+                <select id="epaper_rotation">
+                    <option value="0">0°</option>
+                    <option value="90">90°</option>
+                    <option value="180">180°</option>
+                    <option value="270">270°</option>
+                </select>
+            </label>
+            <label><input type="checkbox" id="epaper_flip_h"> Mirror horizontally</label>
+            <label><input type="checkbox" id="epaper_flip_v"> Mirror vertically</label>
+            <label><input type="checkbox" id="epaper_dither" checked> Dither</label>
+        </div>
+        <div class="photo-controls" id="epaper_colors">
+            <strong>Colors:</strong>
+            <label><input type="checkbox" data-epaper-color="0" checked> Black</label>
+            <label><input type="checkbox" data-epaper-color="1" checked> White</label>
+            <label><input type="checkbox" data-epaper-color="2" checked> Yellow</label>
+            <label><input type="checkbox" data-epaper-color="3" checked> Red</label>
+        </div>
+        <canvas id="epaper_preview" width="648" height="480"></canvas>
+        <div class="palette">
+            <span><i class="swatch" style="background:#171717"></i>Black</span>
+            <span><i class="swatch" style="background:#f5f0d2"></i>White</span>
+            <span><i class="swatch" style="background:#e4bd2d"></i>Yellow</span>
+            <span><i class="swatch" style="background:#b52d36"></i>Red</span>
+        </div>
+        <div class="photo-controls">
+            <button id="epaper_convert" disabled>Convert image</button>
+            <button id="epaper_download" disabled>Download panel image</button>
+            <button id="epaper_flash" disabled>Flash image to tag</button>
+            <button id="epaper_ble" disabled>Send image by BLE</button>
+        </div>
+        <div id="epaper_status" class="photo-status">Choose a photo to begin.</div>
+        <p class="warning">Direct upload works only with the signed Photo Viewer firmware. The server refuses to erase or write the image slot if that firmware is not detected.</p>
+    </section>
     <section>
         <h2>Glitcher</h2>
         <label for="delay">Delay Input (µs):</label>
@@ -206,6 +318,342 @@
         const answerDiv = document.getElementById('answer');
         const contentDiv = document.getElementById("content");
         const progressMarker = document.getElementById("dot");
+
+        const EPD_WIDTH = 648;
+        const EPD_HEIGHT = 480;
+        const EPD_BYTES = EPD_WIDTH * EPD_HEIGHT / 4;
+        const epaperCanvas = document.getElementById('epaper_preview');
+        const epaperContext = epaperCanvas.getContext('2d', { willReadFrequently: true });
+        const epaperFile = document.getElementById('epaper_file');
+        const epaperConvert = document.getElementById('epaper_convert');
+        const epaperDownload = document.getElementById('epaper_download');
+        const epaperFlash = document.getElementById('epaper_flash');
+        const epaperBle = document.getElementById('epaper_ble');
+        const epaperStatus = document.getElementById('epaper_status');
+        let epaperSource = null;
+        let epaperPacked = null;
+
+        const PHOTO_SERVICE_UUID = '7b1e0000-6e8a-4f4b-a2b7-2c648480e001';
+        const PHOTO_CONTROL_UUID = '7b1e0001-6e8a-4f4b-a2b7-2c648480e001';
+        const PHOTO_DATA_UUID = '7b1e0002-6e8a-4f4b-a2b7-2c648480e001';
+        const PHOTO_STATUS_UUID = '7b1e0003-6e8a-4f4b-a2b7-2c648480e001';
+
+        const epaperPalette = [
+            { code: 0, rgb: [23, 23, 23] },
+            { code: 1, rgb: [245, 240, 210] },
+            { code: 2, rgb: [228, 189, 45] },
+            { code: 3, rgb: [181, 45, 54] }
+        ];
+
+        function nearestEpaperColor(r, g, b) {
+            const enabled = epaperPalette.filter(color =>
+                document.querySelector(`[data-epaper-color="${color.code}"]`).checked
+            );
+            let best = enabled[0];
+            let bestDistance = Infinity;
+            for (const color of enabled) {
+                const dr = r - color.rgb[0];
+                const dg = g - color.rgb[1];
+                const db = b - color.rgb[2];
+                const distance = dr * dr * 0.299 + dg * dg * 0.587 + db * db * 0.114;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = color;
+                }
+            }
+            return best;
+        }
+
+        function drawEpaperSource() {
+            if (!epaperSource) return;
+
+            const rotation = Number(document.getElementById('epaper_rotation').value);
+            const rotated = rotation === 90 || rotation === 270;
+            const sourceWidth = rotated ? epaperSource.height : epaperSource.width;
+            const sourceHeight = rotated ? epaperSource.width : epaperSource.height;
+            const fit = document.getElementById('epaper_fit').value;
+            const scale = fit === 'cover'
+                ? Math.max(EPD_WIDTH / sourceWidth, EPD_HEIGHT / sourceHeight)
+                : Math.min(EPD_WIDTH / sourceWidth, EPD_HEIGHT / sourceHeight);
+
+            epaperContext.save();
+            epaperContext.fillStyle = 'rgb(245,240,210)';
+            epaperContext.fillRect(0, 0, EPD_WIDTH, EPD_HEIGHT);
+            epaperContext.translate(EPD_WIDTH / 2, EPD_HEIGHT / 2);
+            epaperContext.scale(
+                document.getElementById('epaper_flip_h').checked ? -1 : 1,
+                document.getElementById('epaper_flip_v').checked ? -1 : 1
+            );
+            epaperContext.rotate(rotation * Math.PI / 180);
+            epaperContext.drawImage(
+                epaperSource,
+                -epaperSource.width * scale / 2,
+                -epaperSource.height * scale / 2,
+                epaperSource.width * scale,
+                epaperSource.height * scale
+            );
+            epaperContext.restore();
+        }
+
+        function convertEpaperImage() {
+            if (!epaperSource) return;
+            drawEpaperSource();
+
+            const image = epaperContext.getImageData(0, 0, EPD_WIDTH, EPD_HEIGHT);
+            const pixels = image.data;
+            const dither = document.getElementById('epaper_dither').checked;
+            const errors = dither ? new Float32Array(EPD_WIDTH * EPD_HEIGHT * 3) : null;
+            epaperPacked = new Uint8Array(EPD_BYTES);
+
+            for (let y = 0; y < EPD_HEIGHT; y++) {
+                for (let x = 0; x < EPD_WIDTH; x++) {
+                    const pixel = y * EPD_WIDTH + x;
+                    const rgba = pixel * 4;
+                    const error = pixel * 3;
+                    const r = Math.max(0, Math.min(255, pixels[rgba] + (errors ? errors[error] : 0)));
+                    const g = Math.max(0, Math.min(255, pixels[rgba + 1] + (errors ? errors[error + 1] : 0)));
+                    const b = Math.max(0, Math.min(255, pixels[rgba + 2] + (errors ? errors[error + 2] : 0)));
+                    const color = nearestEpaperColor(r, g, b);
+
+                    pixels[rgba] = color.rgb[0];
+                    pixels[rgba + 1] = color.rgb[1];
+                    pixels[rgba + 2] = color.rgb[2];
+                    pixels[rgba + 3] = 255;
+                    epaperPacked[pixel >> 2] |= color.code << (6 - (pixel & 3) * 2);
+
+                    if (errors) {
+                        const er = r - color.rgb[0];
+                        const eg = g - color.rgb[1];
+                        const eb = b - color.rgb[2];
+                        const spread = (targetX, targetY, weight) => {
+                            if (targetX < 0 || targetX >= EPD_WIDTH || targetY >= EPD_HEIGHT) return;
+                            const target = (targetY * EPD_WIDTH + targetX) * 3;
+                            errors[target] += er * weight;
+                            errors[target + 1] += eg * weight;
+                            errors[target + 2] += eb * weight;
+                        };
+                        spread(x + 1, y, 7 / 16);
+                        spread(x - 1, y + 1, 3 / 16);
+                        spread(x, y + 1, 5 / 16);
+                        spread(x + 1, y + 1, 1 / 16);
+                    }
+                }
+            }
+
+            epaperContext.putImageData(image, 0, 0);
+            epaperDownload.disabled = false;
+            epaperFlash.disabled = false;
+            epaperBle.disabled = false;
+            epaperStatus.textContent = `Ready: ${EPD_WIDTH}×${EPD_HEIGHT}, 2 bpp, ${epaperPacked.length.toLocaleString()} bytes.`;
+        }
+
+        epaperFile.addEventListener('change', () => {
+            const file = epaperFile.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            const image = new Image();
+            image.onload = () => {
+                URL.revokeObjectURL(url);
+                epaperSource = image;
+                epaperConvert.disabled = false;
+                epaperDownload.disabled = true;
+                epaperFlash.disabled = true;
+                epaperBle.disabled = true;
+                drawEpaperSource();
+                epaperStatus.textContent = `${file.name} loaded. Adjust the controls, then convert.`;
+            };
+            image.onerror = () => {
+                URL.revokeObjectURL(url);
+                epaperStatus.textContent = 'Could not decode this image.';
+            };
+            image.src = url;
+        });
+
+        for (const id of ['epaper_fit', 'epaper_rotation', 'epaper_flip_h', 'epaper_flip_v']) {
+            document.getElementById(id).addEventListener('change', () => {
+                if (!epaperSource) return;
+                drawEpaperSource();
+                epaperPacked = null;
+                epaperDownload.disabled = true;
+                epaperFlash.disabled = true;
+                epaperBle.disabled = true;
+                epaperStatus.textContent = 'Preview changed; convert again to apply it.';
+            });
+        }
+
+        document.getElementById('epaper_dither').addEventListener('change', () => {
+            epaperPacked = null;
+            epaperDownload.disabled = true;
+            epaperFlash.disabled = true;
+            epaperBle.disabled = true;
+            if (epaperSource) epaperStatus.textContent = 'Dithering changed; convert again to apply it.';
+        });
+
+        document.querySelectorAll('[data-epaper-color]').forEach(input => {
+            input.addEventListener('change', () => {
+                const enabled = document.querySelectorAll('[data-epaper-color]:checked');
+                if (!enabled.length) {
+                    input.checked = true;
+                    epaperStatus.textContent = 'At least one display color must remain selected.';
+                    return;
+                }
+                epaperPacked = null;
+                epaperDownload.disabled = true;
+                epaperFlash.disabled = true;
+                epaperBle.disabled = true;
+                if (epaperSource) epaperStatus.textContent = 'Color palette changed; convert again to apply it.';
+            });
+        });
+
+        epaperConvert.addEventListener('click', convertEpaperImage);
+        epaperDownload.addEventListener('click', () => {
+            if (!epaperPacked) return;
+            const blob = new Blob([epaperPacked], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'epaper-648x480-bwry.bin';
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+
+        function crc32(bytes) {
+            let crc = 0xffffffff;
+            for (const value of bytes) {
+                crc ^= value;
+                for (let bit = 0; bit < 8; bit++) {
+                    crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+                }
+            }
+            return (crc ^ 0xffffffff) >>> 0;
+        }
+
+        epaperBle.addEventListener('click', async () => {
+            if (!epaperPacked) return;
+            if (!navigator.bluetooth) {
+                epaperStatus.textContent = 'This browser has no Web Bluetooth. On iPhone use Bluefy (Safari is unsupported), or use the ESP32 button.';
+                return;
+            }
+            if (!confirm('Send this image directly to the BLE tag?')) return;
+
+            let device;
+            epaperBle.disabled = true;
+            epaperFlash.disabled = true;
+            try {
+                epaperStatus.textContent = 'Choose EPHOTO-648…';
+                device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [PHOTO_SERVICE_UUID] }]
+                });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(PHOTO_SERVICE_UUID);
+                const control = await service.getCharacteristic(PHOTO_CONTROL_UUID);
+                const data = await service.getCharacteristic(PHOTO_DATA_UUID);
+                const status = await service.getCharacteristic(PHOTO_STATUS_UUID);
+                const writeWithResponse = (characteristic, value) =>
+                    characteristic.writeValueWithResponse
+                        ? characteristic.writeValueWithResponse(value)
+                        : characteristic.writeValue(value);
+
+                let latestState = 0;
+                let latestOffset = 0;
+                let latestError = 0;
+                const waiters = [];
+                const updateStatus = event => {
+                    const view = event.target.value;
+                    latestState = view.getUint8(1);
+                    latestError = view.getUint16(2, true);
+                    latestOffset = view.getUint32(4, true);
+                    while (waiters.length) waiters.shift()();
+                };
+                await status.startNotifications();
+                status.addEventListener('characteristicvaluechanged', updateStatus);
+
+                const waitForState = async (wanted, timeoutMs) => {
+                    const end = Date.now() + timeoutMs;
+                    while (!wanted.includes(latestState)) {
+                        if (latestState === 255) throw new Error(`Tag error ${latestError} at byte ${latestOffset}`);
+                        const remaining = end - Date.now();
+                        if (remaining <= 0) throw new Error('Timed out waiting for the tag');
+                        await Promise.race([
+                            new Promise(resolve => waiters.push(resolve)),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for the tag')), remaining))
+                        ]);
+                    }
+                };
+
+                const expectedCrc = crc32(epaperPacked);
+                const start = new ArrayBuffer(16);
+                const header = new DataView(start);
+                header.setUint8(0, 1);
+                header.setUint8(1, 1);
+                header.setUint16(2, EPD_WIDTH, true);
+                header.setUint16(4, EPD_HEIGHT, true);
+                header.setUint8(6, 1);
+                header.setUint8(7, 0);
+                header.setUint32(8, EPD_BYTES, true);
+                header.setUint32(12, expectedCrc, true);
+                await writeWithResponse(control, start);
+                await waitForState([2], 5000);
+
+                const payloadSize = 16;
+                for (let offset = 0; offset < epaperPacked.length; offset += payloadSize) {
+                    const count = Math.min(payloadSize, epaperPacked.length - offset);
+                    const packet = new Uint8Array(4 + count);
+                    new DataView(packet.buffer).setUint32(0, offset, true);
+                    packet.set(epaperPacked.subarray(offset, offset + count), 4);
+                    await writeWithResponse(data, packet);
+                    if ((offset & 0x3ff) === 0) {
+                        epaperStatus.textContent = `BLE upload: ${Math.floor(offset * 100 / EPD_BYTES)}%`;
+                    }
+                }
+
+                await writeWithResponse(control, new Uint8Array([2]));
+                epaperStatus.textContent = 'Image verified; e-paper is refreshing…';
+                await waitForState([5], 60000);
+                epaperStatus.textContent = 'BLE upload complete.';
+            } catch (error) {
+                epaperStatus.textContent = error.message || String(error);
+            } finally {
+                if (device && device.gatt.connected) device.gatt.disconnect();
+                epaperBle.disabled = !epaperPacked;
+                epaperFlash.disabled = !epaperPacked;
+            }
+        });
+
+        epaperFlash.addEventListener('click', async () => {
+            if (!epaperPacked) return;
+            if (!confirm('Flash this image and replace the current display contents?')) return;
+
+            epaperFlash.disabled = true;
+            epaperConvert.disabled = true;
+            epaperDownload.disabled = true;
+            try {
+                epaperStatus.textContent = 'Checking viewer and erasing the protected image slot…';
+                while (true) {
+                    const prepare = await fetch('/prepare_epaper_image', { method: 'POST' });
+                    const prepareText = await prepare.text();
+                    if (!prepare.ok) throw new Error(prepareText);
+                    epaperStatus.textContent = prepareText;
+                    if (prepare.status !== 202) break;
+                }
+
+                epaperStatus.textContent = 'Uploading and verifying 77,760 bytes… Keep the tag connected.';
+                const upload = await fetch('/epaper_image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: epaperPacked
+                });
+                const uploadText = await upload.text();
+                if (!upload.ok) throw new Error(uploadText);
+                epaperStatus.textContent = uploadText;
+            } catch (error) {
+                epaperStatus.textContent = error.message || String(error);
+            } finally {
+                epaperFlash.disabled = !epaperPacked;
+                epaperConvert.disabled = !epaperSource;
+                epaperDownload.disabled = !epaperPacked;
+            }
+        });
 
 
         //Graph feature

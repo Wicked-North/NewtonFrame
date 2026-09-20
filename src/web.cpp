@@ -10,18 +10,77 @@
 #include <ESPAsyncWebServer.h>
 #include <SPIFFSEditor.h>
 #include <LoopbackStream.h>
+#include <string.h>
 
 #include "web.h"
 #include "nrf_swd.h"
 #include "glitcher.h"
 #include "defines.h"
 
-const char* ssid = "REPLACE_WITH_YOUR_WIFI_SSID";
-const char* password = "REPLACE_WITH_YOUR_WIFI_PASSWORD";
+#if __has_include("wifi_credentials.h")
+#include "wifi_credentials.h"
+#else
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+#define WEB_USERNAME "admin"
+#define WEB_PASSWORD "admin"
+#define FALLBACK_AP_SSID "SWD-Photo"
+#define FALLBACK_AP_PASSWORD "epaper648"
+#endif
 
-const char *http_username = "admin";
-const char *http_password = "admin";
+const char *ssid = WIFI_SSID;
+const char *password = WIFI_PASSWORD;
+const char *http_username = WEB_USERNAME;
+const char *http_password = WEB_PASSWORD;
 AsyncWebServer server(80);
+
+namespace
+{
+constexpr uint32_t PHOTO_IMAGE_ADDRESS = 0x0001D000;
+constexpr uint32_t PHOTO_IMAGE_SIZE = 648 * 480 / 4;
+constexpr uint32_t PHOTO_IMAGE_MARKER_ADDRESS = 0x0002FFFC;
+constexpr uint32_t PHOTO_IMAGE_MARKER = 0x31475045;
+constexpr uint32_t PHOTO_VIEWER_ID_ADDRESS = 0x0001CFF0;
+constexpr uint8_t PHOTO_VIEWER_ID[16] = {
+  'E', 'P', 'H', 'O', 'T', 'O', '6', '4', '8', 'V', '1', 0x00, 0x51, 0xA7, 0x2C, 0xE9
+};
+
+bool photo_upload_prepared = false;
+bool photo_upload_failed = false;
+bool photo_upload_completed = false;
+String photo_upload_message;
+uint32_t photo_upload_written = 0;
+uint16_t photo_upload_buffered = 0;
+uint32_t photo_upload_buffer[64];
+uint32_t photo_prepare_address = 0;
+
+bool photoViewerInstalled()
+{
+  uint32_t id[4];
+  if (nrf_read_bank(PHOTO_VIEWER_ID_ADDRESS, id, sizeof(id)) != 0)
+    return false;
+  return memcmp(id, PHOTO_VIEWER_ID, sizeof(PHOTO_VIEWER_ID)) == 0;
+}
+
+bool flushPhotoUploadBuffer()
+{
+  if (photo_upload_buffered == 0)
+    return true;
+
+  const uint32_t address = PHOTO_IMAGE_ADDRESS + photo_upload_written;
+  if (nrf_write_bank(address, photo_upload_buffer, photo_upload_buffered) != 0)
+    return false;
+
+  uint32_t verify[64];
+  if (nrf_read_bank(address, verify, photo_upload_buffered) != 0 ||
+      memcmp(verify, photo_upload_buffer, photo_upload_buffered) != 0)
+    return false;
+
+  photo_upload_written += photo_upload_buffered;
+  photo_upload_buffered = 0;
+  return true;
+}
+}
 
 unsigned long hstol(String recv)
 {
@@ -77,15 +136,28 @@ void init_web()
   Serial.println(WiFi.getHostname());
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.printf("Connecting to WiFi %s\r\n", ssid);
-  while (WiFi.status() != WL_CONNECTED)
+  if (ssid[0] != '\0')
+    WiFi.begin(ssid, password);
+  Serial.printf("Connecting to configured WiFi\r\n");
+  const unsigned long wifi_start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifi_start < 20000)
   {
     Serial.print('.');
-    delay(1000);
+    delay(500);
   }
-  Serial.print("Connected! IP address: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.print("Connected! IP address: ");
+    Serial.println(WiFi.localIP());
+  }
+  else
+  {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(FALLBACK_AP_SSID, FALLBACK_AP_PASSWORD);
+    Serial.printf("WiFi unavailable; started %s AP at ", FALLBACK_AP_SSID);
+    Serial.println(WiFi.softAPIP());
+  }
 
   // Make accessible via http://swd.local using mDNS responder
   if (!MDNS.begin("swd"))
@@ -410,6 +482,150 @@ void init_web()
                 return;
               }
               request->send(200, "text/plain", "Wrong parameter"); });
+
+  server.on("/prepare_epaper_image", HTTP_POST, [](AsyncWebServerRequest *request)
+            {
+              if (get_glitcher())
+              {
+                request->send(409, "text/plain", "ERROR: Glitcher is running");
+                return;
+              }
+              if (nrf_begin(true) != 0x2ba01477)
+              {
+                request->send(503, "text/plain", "ERROR: nRF52811 not connected");
+                return;
+              }
+              if (!nrf_read_lock_state())
+              {
+                request->send(423, "text/plain", "ERROR: nRF52811 is locked");
+                return;
+              }
+              if (!photoViewerInstalled())
+              {
+                request->send(409, "text/plain", "ERROR: Photo Viewer firmware is not installed");
+                return;
+              }
+
+              if (photo_upload_prepared)
+              {
+                request->send(200, "text/plain", "Ready for 648x480 image");
+                return;
+              }
+
+              if (photo_prepare_address == 0)
+              {
+                photo_upload_failed = false;
+                photo_upload_completed = false;
+                photo_upload_message = "Image upload was not prepared";
+                photo_prepare_address = PHOTO_IMAGE_ADDRESS;
+              }
+
+              // Keep each asynchronous HTTP callback short enough to avoid
+              // starving AsyncTCP while the nRF NVMC performs page erases.
+              for (uint8_t page = 0; page < 4 && photo_prepare_address < 0x30000; page++)
+              {
+                if (erase_page(photo_prepare_address) != 0)
+                {
+                  photo_prepare_address = 0;
+                  request->send(500, "text/plain", "ERROR: Failed to erase image storage");
+                  return;
+                }
+                photo_prepare_address += 0x400;
+              }
+
+              if (photo_prepare_address < 0x30000)
+              {
+                const uint32_t erased = photo_prepare_address - PHOTO_IMAGE_ADDRESS;
+                const uint32_t total = 0x30000 - PHOTO_IMAGE_ADDRESS;
+                request->send(202, "text/plain", "Erasing image storage: " + String(erased * 100 / total) + "%");
+                return;
+              }
+
+              photo_prepare_address = 0;
+              photo_upload_prepared = true;
+              photo_upload_message = "Ready";
+              request->send(200, "text/plain", "Ready for 648x480 image"); });
+
+  server.on(
+      "/epaper_image", HTTP_POST,
+      [](AsyncWebServerRequest *request)
+      {
+        if (photo_upload_failed)
+          request->send(500, "text/plain", "ERROR: " + photo_upload_message);
+        else if (photo_upload_completed)
+          request->send(200, "text/plain", "Image verified; tag reset to refresh the display");
+        else if (!photo_upload_prepared)
+          request->send(409, "text/plain", "ERROR: Prepare the image slot first");
+        else
+          request->send(500, "text/plain", "ERROR: Incomplete image upload");
+      },
+      nullptr,
+      [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+      {
+        if (index == 0)
+        {
+          photo_upload_failed = false;
+          photo_upload_completed = false;
+          photo_upload_message = "Upload failed";
+          photo_upload_written = 0;
+          photo_upload_buffered = 0;
+          if (!photo_upload_prepared)
+          {
+            photo_upload_failed = true;
+            photo_upload_message = "Image slot was not prepared";
+          }
+          else if (total != PHOTO_IMAGE_SIZE)
+          {
+            photo_upload_failed = true;
+            photo_upload_message = "Expected exactly 77760 bytes";
+          }
+        }
+
+        if (!photo_upload_failed)
+        {
+          for (size_t position = 0; position < len; position++)
+          {
+            reinterpret_cast<uint8_t *>(photo_upload_buffer)[photo_upload_buffered++] = data[position];
+            if (photo_upload_buffered == sizeof(photo_upload_buffer) && !flushPhotoUploadBuffer())
+            {
+              photo_upload_failed = true;
+              photo_upload_message = "Flash verification failed";
+              break;
+            }
+          }
+        }
+
+        if (index + len == total)
+        {
+          if (!photo_upload_failed && !flushPhotoUploadBuffer())
+          {
+            photo_upload_failed = true;
+            photo_upload_message = "Final flash verification failed";
+          }
+          if (!photo_upload_failed && photo_upload_written != PHOTO_IMAGE_SIZE)
+          {
+            photo_upload_failed = true;
+            photo_upload_message = "Incomplete image upload";
+          }
+          if (!photo_upload_failed)
+          {
+            if (write_flash(PHOTO_IMAGE_MARKER_ADDRESS, PHOTO_IMAGE_MARKER) != 0 ||
+                read_register(PHOTO_IMAGE_MARKER_ADDRESS) != PHOTO_IMAGE_MARKER)
+            {
+              photo_upload_failed = true;
+              photo_upload_message = "Could not commit image marker";
+            }
+          }
+
+          photo_upload_prepared = false;
+          if (!photo_upload_failed)
+          {
+            photo_upload_completed = true;
+            nrf_soft_reset();
+          }
+        }
+        (void)request;
+      });
 
   server.on("/set_glitcher", HTTP_POST, [](AsyncWebServerRequest *request)
             {

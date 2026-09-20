@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980">
+  <defs>
+    <style>
+      .bg{fill:#f7f8fa}.box{fill:#fff;stroke:#243447;stroke-width:3}.chip{fill:#17212b;stroke:#6ab0f3;stroke-width:5}.title{font:700 32px Arial,sans-serif;fill:#17212b}.subtitle{font:18px Arial,sans-serif;fill:#52606d}.head{font:700 22px Arial,sans-serif;fill:#17212b}.chiptext{font:700 26px Arial,sans-serif;fill:#fff}.text{font:17px Arial,sans-serif;fill:#17212b}.small{font:15px Arial,sans-serif;fill:#334e68}.wire{fill:none;stroke:#2878b5;stroke-width:4}.power{fill:none;stroke:#d64545;stroke-width:5}.ground{fill:none;stroke:#37474f;stroke-width:4}.optional{fill:none;stroke:#d28b20;stroke-width:4;stroke-dasharray:10 8}.note{fill:#fff7df;stroke:#d28b20;stroke-width:2}.pin{fill:#d9eefa;stroke:#2878b5;stroke-width:1}.label{font:700 15px Arial,sans-serif;fill:#174a70}
+    </style>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#2878b5"/></marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#d64545"/></marker>
+  </defs>
+  <rect class="bg" width="1400" height="980"/>
+  <text class="title" x="700" y="48" text-anchor="middle">SoluM Newton M3 — Verified Functional Schematic</text>
+  <text class="subtitle" x="700" y="78" text-anchor="middle">EL060H6W4A display · nRF52811-QFAA (48-pin QFN) · logical signal map</text>
+
+  <rect class="box" x="45" y="130" width="300" height="210" rx="18"/>
+  <text class="head" x="195" y="168" text-anchor="middle">ESP32 programmer</text>
+  <text class="text" x="70" y="210">GPIO19 — SWDIO</text>
+  <text class="text" x="70" y="245">GPIO21 — SWDCLK</text>
+  <text class="text" x="70" y="280">GND — common ground</text>
+  <text class="text" x="70" y="315">3.3 V — target power*</text>
+
+  <rect class="chip" x="500" y="155" width="400" height="570" rx="24"/>
+  <text class="chiptext" x="700" y="205" text-anchor="middle">nRF52811-QFAA</text>
+  <text class="chiptext" x="700" y="240" text-anchor="middle">Onboard controller</text>
+  <rect class="pin" x="520" y="278" width="360" height="56" rx="8"/>
+  <text class="label" x="700" y="312" text-anchor="middle">SWDIO · SWDCLK · P0.21/nRESET</text>
+  <rect class="pin" x="520" y="355" width="360" height="95" rx="8"/>
+  <text class="label" x="700" y="385" text-anchor="middle">DISPLAY</text>
+  <text class="small" x="700" y="414" text-anchor="middle">P0.02–P0.07, P0.19, P0.20,</text>
+  <text class="small" x="700" y="438" text-anchor="middle">P0.23, P0.24</text>
+  <rect class="pin" x="520" y="472" width="360" height="72" rx="8"/>
+  <text class="label" x="700" y="501" text-anchor="middle">EXTERNAL SPI FLASH</text>
+  <text class="small" x="700" y="528" text-anchor="middle">P0.12–P0.15</text>
+  <rect class="pin" x="520" y="566" width="360" height="72" rx="8"/>
+  <text class="label" x="700" y="595" text-anchor="middle">EXTERNAL NFC</text>
+  <text class="small" x="700" y="622" text-anchor="middle">P0.08–P0.11</text>
+  <rect class="pin" x="520" y="660" width="360" height="42" rx="8"/>
+  <text class="label" x="700" y="678" text-anchor="middle">USER BUTTON: P0.28 or P0.29</text>
+  <text class="small" x="700" y="697" text-anchor="middle">QFN physical pin 40 or 41; exact one unconfirmed</text>
+
+  <rect class="box" x="1045" y="130" width="310" height="260" rx="18"/>
+  <text class="head" x="1200" y="168" text-anchor="middle">UC8159 e-paper</text>
+  <text class="text" x="1070" y="207">648 × 480 pixels</text>
+  <text class="text" x="1070" y="239">2 bits per pixel</text>
+  <text class="text" x="1070" y="271">Black / White / Yellow / Red</text>
+  <text class="text" x="1070" y="303">SPI data and control</text>
+  <text class="text" x="1070" y="335">Driven by onboard nRF</text>
+  <text class="small" x="1070" y="367">ESP32 display wires not required</text>
+
+  <rect class="box" x="1045" y="445" width="310" height="135" rx="18"/>
+  <text class="head" x="1200" y="483" text-anchor="middle">External SPI flash</text>
+  <text class="text" x="1070" y="523">CS · MISO · CLK · MOSI</text>
+  <text class="small" x="1070" y="554">Capacity not yet measured on unit</text>
+
+  <rect class="box" x="1045" y="635" width="310" height="150" rx="18"/>
+  <text class="head" x="1200" y="673" text-anchor="middle">External NFC device</text>
+  <text class="text" x="1070" y="713">I²C SDA · SCL · power · IRQ</text>
+  <text class="small" x="1070" y="745">Likely NT3H1101; not confirmed</text>
+
+  <rect class="box" x="45" y="435" width="300" height="165" rx="18"/>
+  <text class="head" x="195" y="473" text-anchor="middle">4-cell battery pack</text>
+  <text class="text" x="70" y="516">Powers tag independently</text>
+  <text class="text" x="70" y="550">Factory PCB connection</text>
+  <text class="small" x="70" y="581">Exact regulator topology unknown</text>
+
+  <rect class="note" x="45" y="665" width="300" height="145" rx="16"/>
+  <text class="head" x="195" y="703" text-anchor="middle">Push button</text>
+  <text class="text" x="70" y="743">Likely P0.28 or P0.29</text>
+  <text class="small" x="70" y="773">Physical QFN pin 40 or 41</text>
+  <text class="small" x="70" y="795">Exact GPIO needs continuity test</text>
+
+  <path class="wire" d="M345 207 H500" marker-end="url(#arrowBlue)"/>
+  <path class="wire" d="M345 243 H500" marker-end="url(#arrowBlue)"/>
+  <path class="ground" d="M345 278 H445 V750 H500"/>
+  <path class="power" d="M345 313 H420 V125 H700 V155" marker-end="url(#arrowRed)"/>
+
+  <path class="wire" d="M900 402 H1045" marker-end="url(#arrowBlue)"/>
+  <path class="wire" d="M900 508 H1045" marker-end="url(#arrowBlue)"/>
+  <path class="wire" d="M900 602 H980 V710 H1045" marker-end="url(#arrowBlue)"/>
+  <path class="power" d="M345 520 H430 V115 H675 V155" marker-end="url(#arrowRed)"/>
+  <path class="optional" d="M345 735 H455 V681 H520" marker-end="url(#arrowBlue)"/>
+
+  <text class="small" x="55" y="880">* Use one tag power source only. Never connect battery power and ESP32 3.3 V simultaneously unless isolation is verified.</text>
+  <text class="small" x="55" y="914">Solid blue = verified signal group · Red = power path · Dashed orange = probable connection requiring continuity confirmation.</text>
+  <text class="small" x="55" y="948">This is a functional schematic reconstructed from firmware and measured configuration; it is not SoluM’s unpublished PCB circuit diagram.</text>
+</svg>

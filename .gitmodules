@@ -1,0 +1,3 @@
+[submodule "Tag_FW_nRF52811"]
+	path = Tag_FW_nRF52811
+	url = https://github.com/OpenEPaperLink/Tag_FW_nRF52811.git

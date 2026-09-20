@@ -4,3 +4,7 @@
 .clang_complete
 .gcc-flags.json
 .vscode
+Tag_BLE_Photo_Viewer/build/
+include/wifi_credentials.h
+.env
+Tag_FW_nRF52811/
