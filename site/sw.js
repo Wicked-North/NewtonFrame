@@ -1,4 +1,4 @@
-const CACHE_NAME = 'newtonframe-studio-v3';
+const CACHE_NAME = 'newtonframe-studio-v4';
 const APP_SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
@@ -31,12 +31,11 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      const network = fetch(event.request).then(response => {
+    fetch(event.request)
+      .then(response => {
         if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
         return response;
-      });
-      return cached || network;
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });
