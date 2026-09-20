@@ -21,10 +21,9 @@ Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 |---|---|
 | S112 MBR and SoftDevice | `0x00000000–0x00018FFF` |
 | BLE application | `0x00019000–0x0002FFFF` |
-| Application RAM | `0x20002000–0x20005FFF` |
+| Application RAM | `0x20001AE0–0x20005FFF` |
 
 The build uses the calibrated internal RC low-frequency clock because the tag does not provide the development kit's external 32.768 kHz crystal.
-The BLE link negotiates an ATT MTU up to 185 bytes and accepts 180-byte Data values containing a 4-byte offset plus 176 image bytes.
 
 The image is not stored in internal flash. The display is bistable and retains the last successfully refreshed image without power.
 

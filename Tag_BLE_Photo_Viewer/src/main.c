@@ -21,7 +21,6 @@
 #define IMAGE_HEIGHT 480u
 #define IMAGE_SIZE (IMAGE_WIDTH * IMAGE_HEIGHT / 4u)
 #define PROTOCOL_VERSION 1u
-#define DATA_CHARACTERISTIC_MAX_LENGTH 180u
 #define ADV_INTERVAL 160u /* 100 ms in 0.625 ms units. */
 #define ADV_DURATION 6000u /* 60 seconds in 10 ms units. */
 #define WAKE_BUTTON_1 28u
@@ -286,8 +285,7 @@ static void services_init(void) {
                                               &m_service_handle));
 
     photo_characteristic_add(PHOTO_UUID_CONTROL, true, false, false, false, 16u, &m_control_handles);
-    photo_characteristic_add(PHOTO_UUID_DATA, true, true, false, false,
-                             DATA_CHARACTERISTIC_MAX_LENGTH, &m_data_handles);
+    photo_characteristic_add(PHOTO_UUID_DATA, true, true, false, false, 20u, &m_data_handles);
     photo_characteristic_add(PHOTO_UUID_STATUS, false, false, true, true, 12u, &m_status_handles);
     status_publish();
 }
@@ -404,7 +402,7 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
         case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
             APP_ERROR_CHECK(sd_ble_gatts_exchange_mtu_reply(
                 m_conn_handle,
-                NRF_SDH_BLE_GATT_MAX_MTU_SIZE));
+                BLE_GATT_ATT_MTU_DEFAULT));
             break;
 
         case BLE_GATTS_EVT_SYS_ATTR_MISSING:
