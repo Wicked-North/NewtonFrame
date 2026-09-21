@@ -269,6 +269,10 @@
     paint.textAlign = 'center';
     paint.font = '700 16px Segoe UI, sans-serif';
     paint.fillText('SCAN FOR SOURCE', qrX + REPOSITORY_QR.length * moduleSize / 2, 398);
+    const welcomePixels = paint.getImageData(0, 0, WIDTH, HEIGHT);
+    RoggenCoreProcessing.snapArtworkToBlackPaper(welcomePixels.data, WIDTH, HEIGHT,
+      [{ x: 63, y: 389, width: 218, height: 44 }]);
+    paint.putImageData(welcomePixels, 0, 0);
     canvas.toBlob(blob => {
       if (blob) loadImage(new File([blob], 'RoggenCore-welcome.png', { type: 'image/png' }));
     }, 'image/png');

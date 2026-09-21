@@ -31,7 +31,25 @@
     return millivolts >= 1500 && millivolts <= 3800 ? millivolts : null;
   }
 
-  const api = { crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus };
+  function snapArtworkToBlackPaper(pixels, width, height, preserveRects = []) {
+    if (pixels.length !== width * height * 4) throw new RangeError('RGBA buffer size does not match its dimensions.');
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (preserveRects.some(rect => x >= rect.x && x < rect.x + rect.width &&
+          y >= rect.y && y < rect.y + rect.height)) continue;
+        const offset = (y * width + x) * 4;
+        const luminance = (299 * pixels[offset] + 587 * pixels[offset + 1] + 114 * pixels[offset + 2]) / 1000;
+        const color = luminance < 132 ? [23, 23, 23] : [245, 240, 210];
+        pixels[offset] = color[0];
+        pixels[offset + 1] = color[1];
+        pixels[offset + 2] = color[2];
+        pixels[offset + 3] = 255;
+      }
+    }
+    return pixels;
+  }
+
+  const api = { crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus, snapArtworkToBlackPaper };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RoggenCoreProcessing = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
