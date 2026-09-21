@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#171612">
-  <meta name="description" content="Prepare and send four-color photos to a NewtonFrame e-paper tag over Bluetooth.">
-  <title>NewtonFrame Studio</title>
+  <meta name="description" content="Prepare and send four-color photos to a RoggenCore e-paper display over Bluetooth.">
+  <title>RoggenCore Studio</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=20260921-5">
@@ -15,9 +15,9 @@
   <div class="ambient ambient-two"></div>
 
   <header class="site-header">
-    <a class="brand" href="./" aria-label="NewtonFrame Studio home">
+    <a class="brand" href="./" aria-label="RoggenCore Studio home">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <span><strong>NewtonFrame</strong><small>Studio</small></span>
+      <span><strong>RoggenCore</strong><small>Studio</small></span>
     </a>
     <div class="header-state">
       <span id="browser-badge" class="badge"><i></i><span>Checking Bluetooth</span></span>
@@ -51,6 +51,7 @@
           </div>
           <div class="file-actions">
             <span id="image-name" class="file-name">No image selected</span>
+            <button id="welcome-image" class="text-button" type="button">RoggenCore welcome</button>
             <label id="change-image" class="text-button" for="image-input" hidden>Change</label>
           </div>
         </div>
@@ -125,6 +126,12 @@
           <i aria-hidden="true"></i>
         </label>
 
+        <label class="switch-row" for="clean-whites">
+          <span><strong>Clean whites</strong><small>Keep bright neutral areas free of colored dither speckles</small></span>
+          <input id="clean-whites" type="checkbox" checked disabled>
+          <i aria-hidden="true"></i>
+        </label>
+
         <button id="convert-button" class="button button-primary full" type="button" disabled>
           <span>Convert for e-paper</span><b aria-hidden="true">→</b>
         </button>
@@ -173,7 +180,9 @@
         <dl>
           <div><dt>Device state</dt><dd id="tag-state">Idle</dd></div>
           <div><dt>Accepted</dt><dd id="accepted-offset">0 / 77,760 bytes</dd></div>
-          <div><dt>Protocol</dt><dd>NewtonFrame v1</dd></div>
+          <div><dt>Battery</dt><dd id="battery-level">Unavailable</dd></div>
+          <div><dt>Pigments</dt><dd id="pigment-counts">Convert an image</dd></div>
+          <div><dt>Protocol</dt><dd>RoggenCore v1</dd></div>
         </dl>
       </details>
     </section>
@@ -190,12 +199,13 @@
   </main>
 
   <footer>
-    <span>NewtonFrame Studio</span>
-    <span>Build 2026.09.21.5 · Images never leave your device.</span>
+    <span>RoggenCore Studio</span>
+    <span>Build 2026.09.21.6 · Images never leave your device.</span>
     <a href="https://github.com/Wicked-North/NewtonFrame">Source &amp; firmware</a>
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260921-5" defer></script>
+  <script src="processing.js?v=20260921-6" defer></script>
+  <script src="app.js?v=20260921-6" defer></script>
 </body>
 </html>

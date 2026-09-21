@@ -1,0 +1,20 @@
+﻿{
+    "schemaVersion":  1,
+    "name":  "RoggenCore",
+    "version":  "1.1.0",
+    "targetPart":  "00052811",
+    "flashSize":  196608,
+    "hexFile":  "RoggenCore-1.1.0-upgrade.hex",
+    "hexSha256":  "2B06E54B10203F70DA7DC404F751790390D5A65A8005D7DA70D09133778F4B98",
+    "hexCrc32":  1448534790,
+    "recoveryCapable":  false,
+    "allowedRanges":  [
+                          {
+                              "start":  102400,
+                              "length":  8192
+                          }
+                      ],
+    "uicrWords":  {
+
+                  }
+}

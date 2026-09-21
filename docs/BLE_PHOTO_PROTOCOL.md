@@ -123,6 +123,8 @@ States:
 
 Initial error codes include invalid header, wrong offset, too much data, CRC mismatch, panel timeout, and transfer timeout.
 
+RoggenCore 1.1.0 also exposes optional read-only characteristic `7b1e0004-6e8a-4f4b-a2b7-2c648480e001`. Its two-byte little-endian value is the supply voltage in millivolts sampled at boot. Clients must treat it as optional for compatibility with earlier firmware.
+
 ## iPhone transport
 
 Mobile Safari does not expose Web Bluetooth. The practical choices are:
@@ -135,7 +137,7 @@ The existing JavaScript converter can be reused. Only its transport changes from
 
 ## Power and wake behavior
 
-The BLE firmware configures both P0.28 and P0.29 as active-low sense inputs before System OFF, until continuity testing identifies the populated switch. On power-up or button wake it advertises for 60 seconds, then returns to System OFF. A connected transfer keeps the system awake. After a successful refresh, the tag reports COMPLETE, disconnects, and returns to System OFF. The display is powered only after START and is shut down on completion, error, disconnect, or timeout.
+The BLE firmware configures both P0.28 and P0.29 as active-low sense inputs before System OFF, until continuity testing identifies the populated switch. On power-up or button wake it advertises for 60 seconds, then returns to System OFF. A connection with no control or image-data write for 120 seconds is disconnected and put into System OFF. Refresh is exempt from this timer. After a successful refresh, the tag reports COMPLETE, disconnects, and returns to System OFF. The display is powered only after START and is shut down on completion, error, disconnect, or timeout.
 
 ## Safe migration
 

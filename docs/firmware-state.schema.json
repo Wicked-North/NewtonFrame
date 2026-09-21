@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wicked-north.github.io/NewtonFrame/firmware-state.schema.json",
+  "title": "RoggenCore Manager device state",
+  "type": "object",
+  "required": ["schemaVersion", "devices"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "lastBridgeAddress": { "type": ["string", "null"] },
+    "devices": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["deviceId", "displayModel", "firmwareName", "firmwareVersion", "updatedUtc"],
+        "properties": {
+          "deviceId": { "type": "string", "pattern": "^[0-9A-F]{16}$" },
+          "displayModel": { "type": "string" },
+          "lastBackupId": { "type": ["string", "null"] },
+          "lastKnownGoodBackupId": { "type": ["string", "null"] },
+          "firmwareName": { "type": "string" },
+          "firmwareVersion": { "type": "string" },
+          "firmwareSha256": { "type": ["string", "null"], "pattern": "^[0-9A-F]{64}$" },
+          "firmwareCrc32": { "type": ["integer", "null"], "minimum": 0, "maximum": 4294967295 },
+          "updatedUtc": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

@@ -5,6 +5,10 @@
 .gcc-flags.json
 .vscode
 Tag_BLE_Photo_Viewer/build/
+**/bin/
+**/obj/
+.toolchains/
+artifacts/
 include/wifi_credentials.h
 .env
 Tag_FW_nRF52811/

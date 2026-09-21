@@ -1,0 +1,8 @@
+{
+  "name": "roggencore",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/site/*.test.js",
+    "check": "node --check site/processing.js && node --check site/app.js"
+  }
+}

@@ -1,0 +1,22 @@
+name: Package RoggenCore Manager
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['manager-v*']
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test and publish
+        shell: pwsh
+        run: ./scripts/Publish-RoggenCoreManager.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RoggenCore-Manager-win-x64
+          path: artifacts/RoggenCore-Manager-win-x64.zip

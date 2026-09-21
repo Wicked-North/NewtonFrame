@@ -10,6 +10,7 @@
 #include <ESPAsyncWebServer.h>
 #include <SPIFFSEditor.h>
 #include <LoopbackStream.h>
+#include <Preferences.h>
 #include <string.h>
 
 #include "web.h"
@@ -136,8 +137,15 @@ void init_web()
   Serial.println(WiFi.getHostname());
 
   WiFi.mode(WIFI_STA);
-  if (ssid[0] != '\0')
-    WiFi.begin(ssid, password);
+  Preferences preferences;
+  preferences.begin("roggencore", true);
+  String stored_ssid = preferences.getString("wifiSsid", "");
+  String stored_password = preferences.getString("wifiPass", "");
+  preferences.end();
+  const char *active_ssid = stored_ssid.length() ? stored_ssid.c_str() : ssid;
+  const char *active_password = stored_ssid.length() ? stored_password.c_str() : password;
+  if (active_ssid[0] != '\0')
+    WiFi.begin(active_ssid, active_password);
   Serial.printf("Connecting to configured WiFi\r\n");
   const unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wifi_start < 20000)
@@ -176,6 +184,15 @@ void init_web()
 
   server.on("/heap", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/plain", String(ESP.getFreeHeap())); });
+
+  server.on("/api/roggencore", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+              const IPAddress address = WiFi.getMode() == WIFI_AP ? WiFi.softAPIP() : WiFi.localIP();
+              String json = "{\"name\":\"RoggenCore Bridge\",\"apiVersion\":1,\"address\":\"http://";
+              json += address.toString();
+              json += "\"}";
+              request->send(200, "application/json", json);
+            });
 
 #define xstr(a) str(a)
 #define str(a) #a

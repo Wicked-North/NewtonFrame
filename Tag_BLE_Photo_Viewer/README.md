@@ -1,11 +1,11 @@
-# nRF52811 BLE Photo Viewer
+# RoggenCore nRF52811 Firmware
 
 Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 
 ## Current status
 
 - Builds against Nordic nRF5 SDK 17.1.0 and S112 7.2.0.
-- Advertises as `EPHOTO-648`.
+- Version 1.1.0 advertises as `RoggenCore`; Studio also accepts legacy `EPHOTO-648` builds.
 - Implements the Control, Data, and Status characteristics from [`../docs/BLE_PHOTO_PROTOCOL.md`](../docs/BLE_PHOTO_PROTOCOL.md).
 - Validates image dimensions, format, offsets, length, and CRC-32.
 - Streams accepted image bytes directly into UC8159 display RAM.
@@ -15,6 +15,10 @@ Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 - Disconnects and enters System OFF after a successful display refresh.
 - Hardware testing has verified S112 startup, advertising, GATT connection, a complete 77,760-byte image transfer, CRC validation, panel refresh, intentional disconnect, post-transfer System OFF, and physical-button wake into a fresh advertising window.
 - Hardware-verified, battery-friendly RGB indicators use short pulses: blue every 3 seconds while advertising, two green connection flashes, yellow every second during transfer, green every 2 seconds during refresh, and a 300 ms green completion pulse. All channels are off in System OFF.
+- Reports a one-shot supply-voltage measurement in millivolts through optional characteristic `...0004...`; displayed percentage is an estimate because primary lithium discharge is nonlinear.
+- Disconnects and enters System OFF after 120 seconds without a control or image-data write. Refresh is exempt so a slow panel cycle is never interrupted.
+
+The panel is bistable: flashing firmware does not erase the picture already visible on it. RoggenCore Studio can generate and upload a RoggenCore welcome frame to replace retained factory artwork.
 
 ## Memory layout
 

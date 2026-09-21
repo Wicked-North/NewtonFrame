@@ -1,7 +1,7 @@
 {
-  "name": "NewtonFrame Studio",
-  "short_name": "NewtonFrame",
-  "description": "Prepare and send four-color photos to a NewtonFrame e-paper tag.",
+  "name": "RoggenCore Studio",
+  "short_name": "RoggenCore",
+  "description": "Prepare and send four-color photos to a RoggenCore e-paper display.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

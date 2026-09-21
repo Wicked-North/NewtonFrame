@@ -13,15 +13,21 @@ endif()
 
 file(TO_CMAKE_PATH "${NRF5_SDK_ROOT}" SDK)
 file(TO_CMAKE_PATH "${ARM_GCC_ROOT}" GCC)
-set(CMAKE_C_COMPILER "${GCC}/bin/arm-none-eabi-gcc.exe")
-set(CMAKE_ASM_COMPILER "${GCC}/bin/arm-none-eabi-gcc.exe")
-set(CMAKE_OBJCOPY "${GCC}/bin/arm-none-eabi-objcopy.exe")
-set(CMAKE_SIZE "${GCC}/bin/arm-none-eabi-size.exe")
+if(WIN32)
+  set(TOOL_SUFFIX ".exe")
+else()
+  set(TOOL_SUFFIX "")
+endif()
+set(CMAKE_C_COMPILER "${GCC}/bin/arm-none-eabi-gcc${TOOL_SUFFIX}")
+set(CMAKE_ASM_COMPILER "${GCC}/bin/arm-none-eabi-gcc${TOOL_SUFFIX}")
+set(CMAKE_OBJCOPY "${GCC}/bin/arm-none-eabi-objcopy${TOOL_SUFFIX}")
+set(CMAKE_SIZE "${GCC}/bin/arm-none-eabi-size${TOOL_SUFFIX}")
 
 project(epaper_ble_receiver C ASM)
 
 add_executable(epaper_ble_receiver
   src/main.c
+  src/battery.c
   src/led_indicator.c
   src/panel.c
   ${SDK}/modules/nrfx/mdk/gcc_startup_nrf52810.S

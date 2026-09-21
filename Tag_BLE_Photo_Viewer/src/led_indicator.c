@@ -21,6 +21,7 @@ typedef enum {
 
 static volatile led_mode_t m_mode = LED_MODE_OFF;
 static volatile uint16_t m_tick;
+static volatile uint32_t m_uptime_tick;
 static volatile bool m_complete_done;
 
 static void leds_write(bool red, bool green, bool blue) {
@@ -81,6 +82,10 @@ bool led_indicator_complete_done(void) {
     return m_complete_done;
 }
 
+uint32_t led_indicator_ticks(void) {
+    return m_uptime_tick;
+}
+
 void led_indicator_off(void) {
     mode_set(LED_MODE_OFF);
 }
@@ -90,6 +95,7 @@ void RTC1_IRQHandler(void) {
     NRF_RTC1->EVENTS_COMPARE[0] = 0;
     NRF_RTC1->TASKS_CLEAR = 1;
 
+    ++m_uptime_tick;
     uint16_t tick = m_tick++;
     switch (m_mode) {
         case LED_MODE_ADVERTISING:
@@ -98,7 +104,6 @@ void RTC1_IRQHandler(void) {
 
         case LED_MODE_CONNECTED:
             leds_write(false, tick < 2u || (tick >= 4u && tick < 6u), false);
-            if (tick >= 6u) mode_set(LED_MODE_OFF);
             break;
 
         case LED_MODE_TRANSFERRING:

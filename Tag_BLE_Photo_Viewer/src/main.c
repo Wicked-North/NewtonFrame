@@ -12,10 +12,11 @@
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
 #include "nrf_soc.h"
+#include "battery.h"
 #include "led_indicator.h"
 #include "panel.h"
 
-#define DEVICE_NAME "EPHOTO-648"
+#define DEVICE_NAME "RoggenCore"
 #define APP_BLE_CONN_CFG_TAG 1
 #define APP_BLE_OBSERVER_PRIO 3
 #define IMAGE_WIDTH 648u
@@ -24,6 +25,7 @@
 #define PROTOCOL_VERSION 1u
 #define ADV_INTERVAL 160u /* 100 ms in 0.625 ms units. */
 #define ADV_DURATION 6000u /* 60 seconds in 10 ms units. */
+#define CONNECTED_TIMEOUT_TICKS 2400u /* 120 seconds in 50 ms LED timer ticks. */
 #define WAKE_BUTTON_1 28u
 #define WAKE_BUTTON_2 29u
 
@@ -31,6 +33,7 @@
 #define PHOTO_UUID_CONTROL 0x0001u
 #define PHOTO_UUID_DATA 0x0002u
 #define PHOTO_UUID_STATUS 0x0003u
+#define PHOTO_UUID_BATTERY 0x0004u
 #define PHOTO_UUID_BASE {0x01, 0xE0, 0x80, 0x84, 0x64, 0x2C, 0xB7, 0xA2, \
                          0x4B, 0x4F, 0x8A, 0x6E, 0x00, 0x00, 0x1E, 0x7B}
 
@@ -51,7 +54,8 @@ typedef enum {
     ERROR_TOO_MUCH_DATA = 3,
     ERROR_CRC_MISMATCH = 4,
     ERROR_NOT_READY = 5,
-    ERROR_PANEL_TIMEOUT = 6
+    ERROR_PANEL_TIMEOUT = 6,
+    ERROR_TRANSFER_TIMEOUT = 7
 } transfer_error_t;
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;
@@ -60,6 +64,7 @@ static uint16_t m_service_handle;
 static ble_gatts_char_handles_t m_control_handles;
 static ble_gatts_char_handles_t m_data_handles;
 static ble_gatts_char_handles_t m_status_handles;
+static ble_gatts_char_handles_t m_battery_handles;
 static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
 static uint8_t m_adv_buffer[BLE_GAP_ADV_SET_DATA_SIZE_MAX];
 static uint8_t m_scan_buffer[BLE_GAP_ADV_SET_DATA_SIZE_MAX];
@@ -76,6 +81,8 @@ static volatile bool m_disconnect_pending;
 static volatile bool m_system_off_pending;
 static bool m_shutdown_after_disconnect;
 static bool m_complete_indicator_pending;
+static uint32_t m_last_activity_tick;
+static uint16_t m_battery_mv;
 
 static void enter_system_off(void) {
     led_indicator_off();
@@ -151,6 +158,18 @@ static void status_publish(void) {
     }
 }
 
+static void battery_publish(void) {
+    uint8_t value[2] = {(uint8_t)m_battery_mv, (uint8_t)(m_battery_mv >> 8)};
+    ble_gatts_value_t gatts_value = {
+        .len = sizeof(value),
+        .offset = 0,
+        .p_value = value
+    };
+    APP_ERROR_CHECK(sd_ble_gatts_value_set(BLE_CONN_HANDLE_INVALID,
+                                            m_battery_handles.value_handle,
+                                            &gatts_value));
+}
+
 static void fail(transfer_error_t error) {
     m_state = STATE_ERROR;
     m_error = error;
@@ -160,6 +179,7 @@ static void fail(transfer_error_t error) {
 
 static void handle_control(uint8_t const *data, uint16_t length) {
     if (length == 0) return;
+    m_last_activity_tick = led_indicator_ticks();
 
     if (data[0] == 0x01u) {
         if (length != 16u || data[1] != PROTOCOL_VERSION ||
@@ -213,6 +233,7 @@ static void handle_control(uint8_t const *data, uint16_t length) {
 }
 
 static void handle_data(uint8_t const *data, uint16_t length) {
+    m_last_activity_tick = led_indicator_ticks();
     if (m_state != STATE_RECEIVING || length < 5u) {
         fail(ERROR_NOT_READY);
         return;
@@ -275,7 +296,7 @@ static void photo_characteristic_add(uint16_t uuid,
 
     attr.p_uuid = &ble_uuid;
     attr.p_attr_md = &attr_md;
-    attr.init_len = readable ? 12u : 0u;
+    attr.init_len = readable ? max_length : 0u;
     attr.max_len = max_length;
     attr.p_value = readable ? initial_value : NULL;
 
@@ -294,7 +315,9 @@ static void services_init(void) {
     photo_characteristic_add(PHOTO_UUID_CONTROL, true, false, false, false, 16u, &m_control_handles);
     photo_characteristic_add(PHOTO_UUID_DATA, true, true, false, false, 20u, &m_data_handles);
     photo_characteristic_add(PHOTO_UUID_STATUS, false, false, true, true, 12u, &m_status_handles);
+    photo_characteristic_add(PHOTO_UUID_BATTERY, false, false, true, false, 2u, &m_battery_handles);
     status_publish();
+    battery_publish();
 }
 
 static void gap_init(void) {
@@ -354,6 +377,7 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
         case BLE_GAP_EVT_CONNECTED:
             m_conn_handle = event->evt.gap_evt.conn_handle;
             led_indicator_connected();
+            m_last_activity_tick = led_indicator_ticks();
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
@@ -450,6 +474,7 @@ void assert_nrf_callback(uint16_t line_num, uint8_t const *file_name) {
 int main(void) {
     nrf_gpio_cfg_input(WAKE_BUTTON_1, NRF_GPIO_PIN_PULLUP);
     nrf_gpio_cfg_input(WAKE_BUTTON_2, NRF_GPIO_PIN_PULLUP);
+    m_battery_mv = battery_measure_millivolts();
     led_indicator_init();
 
     APP_ERROR_CHECK(nrf_sdh_enable_request());
@@ -499,6 +524,20 @@ int main(void) {
             } else {
                 m_system_off_pending = true;
             }
+        }
+        if (m_conn_handle != BLE_CONN_HANDLE_INVALID &&
+            !m_shutdown_after_disconnect &&
+            m_state != STATE_REFRESHING && m_state != STATE_COMPLETE &&
+            led_indicator_ticks() - m_last_activity_tick >= CONNECTED_TIMEOUT_TICKS) {
+            m_state = STATE_ERROR;
+            m_error = ERROR_TRANSFER_TIMEOUT;
+            panel_abort_stream();
+            led_indicator_off();
+            status_publish();
+            m_shutdown_after_disconnect = true;
+            APP_ERROR_CHECK(sd_ble_gap_disconnect(
+                m_conn_handle,
+                BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION));
         }
         if (m_system_off_pending) {
             m_system_off_pending = false;

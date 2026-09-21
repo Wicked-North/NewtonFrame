@@ -298,6 +298,10 @@ This is expected. The display has four physical pigments rather than RGB light-e
 
 ## 11. Recovery information
 
+The recommended recovery interface is **RoggenCore Manager** in `tools/RoggenCore.Manager`. It discovers the ESP32 through USB serial, mDNS, the fallback AP, a saved address, or LAN scanning. Before a normal upgrade it creates timestamped full-flash and UICR backups, records CRC-32 and SHA-256, and updates `%APPDATA%\RoggenCore\firmware-state.json` only after exact readback verification.
+
+Factory recovery erase is intentionally separate from normal upgrades. It requires a recovery-capable manifest, an exact confirmation phrase, a second warning, explicit board UICR defaults, full-flash verification, and post-unlock diagnostics. Never use a recovery package for a different panel profile.
+
 Important nRF52811 memory regions:
 
 | Region | Address | Purpose |
@@ -319,6 +323,8 @@ Recovery must preserve the bootloader and UICR. The ESP32/SWD connection remains
 ## 12. Current wireless capabilities
 
 - The ESP32 provides Wi-Fi access to the webpage.
-- The nRF52811 hardware supports Bluetooth Low Energy, but the installed Photo Viewer does not currently advertise or accept BLE uploads.
+- RoggenCore on the nRF52811 accepts direct BLE uploads and reports optional supply voltage telemetry.
 - The board is factory-marked as having an external NFC device, but the current Photo Viewer does not use it for image transfer.
-- With the current firmware, the ESP32 is needed to change images but is not needed to keep an image displayed.
+- The ESP32 is needed only for recovery and firmware upgrades; normal image changes use BLE.
+
+The panel is bistable, so factory artwork remains visible after flashing until a refresh occurs. RoggenCore Studio includes a generated **RoggenCore welcome** frame that can replace it through the normal CRC-verified upload path.

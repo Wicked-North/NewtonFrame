@@ -1,6 +1,8 @@
-# NewtonFrame
+# RoggenCore / NewtonFrame
 
-NewtonFrame turns a SoluM/Newton M3 electronic shelf label into a 648×480 four-color photo frame. It combines a tested ESP32/SWD recovery and image-upload workflow with an experimental Bluetooth Low Energy receiver for the tag's onboard nRF52811.
+RoggenCore turns a SoluM/Newton M3 electronic shelf label into a standalone 648×480 four-color BLE photo frame. The repository also contains RoggenCore Manager for safe Windows-based discovery, backup, unlocking, firmware installation, verification, and recovery through an ESP32 SWD bridge.
+
+Manager can provision bridge Wi-Fi securely over the local USB cable, catalogs timestamped CRC/SHA-verified backups, and supports full-readback-verified rollback while preserving UICR.
 
 ![NewtonFrame functional schematic](docs/nrf52811-functional-schematic.svg)
 
@@ -11,10 +13,11 @@ NewtonFrame turns a SoluM/Newton M3 electronic shelf label into a 648×480 four-
 | ESP32 SWD connection, unlock, and recovery | Tested on hardware |
 | Standalone nRF52811 Photo Viewer | Tested on hardware |
 | Browser conversion and ESP32 image upload | Tested end to end |
-| nRF52811 S112 BLE receiver | Builds; not yet flashed or hardware-tested |
-| NewtonFrame Studio Web Bluetooth upload | Implemented; awaits tag-side hardware validation |
+| RoggenCore nRF52811 S112 BLE receiver | Hardware verified, including transfer, refresh, sleep, wake, and RGB indicators |
+| RoggenCore Studio Web Bluetooth upload | Hardware verified at approximately 2.5 KiB/s |
+| RoggenCore Manager for Windows | Implemented with discovery, backups, CRC/SHA verification, upgrade, recovery, and diagnostics |
 
-The BLE firmware is experimental. Keep a verified flash/UICR backup and the ESP32 SWD recovery connection available during bring-up.
+Keep a verified flash/UICR backup and the ESP32 SWD recovery connection available during firmware upgrades.
 
 ## Supported hardware
 
@@ -28,7 +31,10 @@ Panel data is packed at 2 bits per pixel, four pixels per byte, most-significant
 ## Repository layout
 
 - [`data/index.htm`](data/index.htm) — mobile image converter, dithering, ESP32 upload, and Web Bluetooth uploader
-- [`site/`](site/) — standalone installable NewtonFrame Studio for conversion and direct BLE upload
+- [`site/`](site/) — standalone installable RoggenCore Studio for conversion and direct BLE upload
+- [`tools/RoggenCore.Manager/`](tools/RoggenCore.Manager/) — native Windows device manager
+- [`firmware/RoggenCore/`](firmware/RoggenCore/) — integrity-manifested upgrade and recovery packages
+- [`tests/`](tests/) — automated firmware-package, CRC, packing, and manager-core tests
 - [`src/`](src/) — ESP32 SWD programmer and HTTP service
 - [`Tag_Photo_Viewer/`](Tag_Photo_Viewer/) — tested standalone nRF52811 panel firmware
 - [`Tag_BLE_Photo_Viewer/`](Tag_BLE_Photo_Viewer/) — experimental S112 BLE receiver and panel driver
@@ -48,13 +54,13 @@ Panel data is packed at 2 bits per pixel, four pixels per byte, most-significant
 
 If station Wi-Fi is unavailable, the ESP32 starts the documented `SWD-Photo` fallback access point.
 
-## Experimental BLE workflow
+## RoggenCore BLE workflow
 
-The BLE build uses Nordic nRF5 SDK 17.1.0 and S112 7.2.0. It advertises as `EPHOTO-648`, receives an offset-addressed 77,760-byte frame, validates CRC-32, and refreshes only after a valid COMMIT. Image bytes stream directly into UC8159 display RAM, avoiding a framebuffer in the nRF52811's limited RAM and flash.
+RoggenCore uses Nordic nRF5 SDK 17.1.0 and S112 7.2.0. It advertises as `RoggenCore`, receives an offset-addressed 77,760-byte frame, validates CRC-32, and refreshes only after a valid COMMIT. Image bytes stream directly into UC8159 display RAM, avoiding a framebuffer in the nRF52811's limited RAM and flash.
 
-Use [NewtonFrame Studio](https://wicked-north.github.io/NewtonFrame/) to crop, rotate, mirror, quantize, dither, download, and send images. See [`Tag_BLE_Photo_Viewer/README.md`](Tag_BLE_Photo_Viewer/README.md) for firmware build requirements and [`docs/BLE_PHOTO_PROTOCOL.md`](docs/BLE_PHOTO_PROTOCOL.md) for the wire protocol. On iPhone, Web Bluetooth requires a compatible browser such as Bluefy; Safari does not expose Web Bluetooth.
+Use [RoggenCore Studio](https://wicked-north.github.io/NewtonFrame/) to crop, rotate, mirror, quantize, dither, download, and send images. On iPhone, Web Bluetooth requires a compatible browser such as Bluefy; Safari does not expose Web Bluetooth.
 
-Installing the combined S112/application image replaces the tested Photo Viewer layout. Do not flash the BLE application alone at `0x19000`, and do not test it without a recovery path.
+For upgrades, use `firmware/RoggenCore/1.1.0/upgrade-manifest.json`. For factory unlock/conversion, use the recovery manifest only through RoggenCore Manager after reviewing its warnings. The manager records timestamped full-flash/UICR backups and will not boot a mismatched readback.
 
 ## Safety
 

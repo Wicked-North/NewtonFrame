@@ -1,6 +1,6 @@
-# NewtonFrame Studio
+# RoggenCore Studio
 
-A dependency-free static web app for preparing and transferring 648×480 BWRY images to the experimental NewtonFrame BLE firmware.
+A dependency-free static web app for preparing and transferring 648×480 BWRY images to RoggenCore firmware.
 
 ## Features
 

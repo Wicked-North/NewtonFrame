@@ -8,6 +8,7 @@
   const CONTROL_UUID = '7b1e0001-6e8a-4f4b-a2b7-2c648480e001';
   const DATA_UUID = '7b1e0002-6e8a-4f4b-a2b7-2c648480e001';
   const STATUS_UUID = '7b1e0003-6e8a-4f4b-a2b7-2c648480e001';
+  const BATTERY_UUID = '7b1e0004-6e8a-4f4b-a2b7-2c648480e001';
   const CHUNK_BYTES = 16;
   const ACK_INTERVAL = 256;
 
@@ -34,23 +35,25 @@
     3: 'Too much image data',
     4: 'CRC mismatch',
     5: 'Tag is not ready',
-    6: 'Display controller timed out'
+    6: 'Display controller timed out',
+    7: 'Transfer timed out due to inactivity'
   };
 
   const elements = Object.fromEntries([
-    'browser-badge', 'compatibility', 'install-button', 'image-input', 'drop-zone',
+    'browser-badge', 'compatibility', 'install-button', 'image-input', 'drop-zone', 'welcome-image',
     'change-image', 'canvas-shell', 'canvas-overlay', 'preview', 'drag-hint', 'image-name', 'zoom',
-    'zoom-value', 'rotation', 'flip-horizontal', 'flip-vertical', 'dither',
+    'zoom-value', 'rotation', 'flip-horizontal', 'flip-vertical', 'dither', 'clean-whites',
     'reset-button', 'convert-button', 'download-button', 'connect-button',
     'send-button', 'cancel-button', 'device-name', 'device-detail', 'status-text',
-    'progress-label', 'progress-bar', 'crc-label', 'tag-state', 'accepted-offset', 'toast'
+    'progress-label', 'progress-bar', 'crc-label', 'tag-state', 'accepted-offset',
+    'battery-level', 'pigment-counts', 'toast'
   ].map(id => [id, document.getElementById(id)]));
 
   const context = elements.preview.getContext('2d', { willReadFrequently: true });
   const editor = {
     image: null,
     objectUrl: null,
-    fileStem: 'newtonframe',
+    fileStem: 'roggencore',
     fit: 'cover',
     zoom: 1,
     rotation: 0,
@@ -69,6 +72,7 @@
     control: null,
     data: null,
     statusCharacteristic: null,
+    batteryCharacteristic: null,
     notifications: false,
     status: { version: 0, state: 0, error: 0, offset: 0, crc: 0 },
     waiters: new Set(),
@@ -99,7 +103,7 @@
 
   function setEditorEnabled(enabled) {
     for (const item of [elements.zoom, elements.rotation, elements['flip-horizontal'],
-      elements['flip-vertical'], elements.dither, elements['reset-button'], elements['convert-button']]) {
+      elements['flip-vertical'], elements.dither, elements['clean-whites'], elements['reset-button'], elements['convert-button']]) {
       item.disabled = !enabled;
     }
   }
@@ -214,6 +218,32 @@
     image.src = editor.objectUrl;
   }
 
+  function loadWelcomeImage() {
+    const canvas = document.createElement('canvas');
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    const paint = canvas.getContext('2d');
+    paint.fillStyle = 'rgb(245, 240, 210)';
+    paint.fillRect(0, 0, WIDTH, HEIGHT);
+    paint.fillStyle = 'rgb(23, 23, 23)';
+    paint.fillRect(54, 58, 540, 8);
+    paint.font = '700 76px Segoe UI, sans-serif';
+    paint.textAlign = 'center';
+    paint.fillText('ROGGENCORE', WIDTH / 2, 205);
+    paint.font = '28px Segoe UI, sans-serif';
+    paint.fillText('YOUR PAPER. YOUR PICTURES.', WIDTH / 2, 258);
+    const colors = ['rgb(23,23,23)', 'rgb(245,240,210)', 'rgb(228,189,45)', 'rgb(181,45,54)'];
+    colors.forEach((color, index) => {
+      paint.fillStyle = color;
+      paint.fillRect(196 + index * 64, 315, 48, 48);
+      paint.strokeStyle = 'rgb(23,23,23)';
+      paint.strokeRect(196 + index * 64, 315, 48, 48);
+    });
+    canvas.toBlob(blob => {
+      if (blob) loadImage(new File([blob], 'RoggenCore-welcome.png', { type: 'image/png' }));
+    }, 'image/png');
+  }
+
   async function convertImage() {
     if (!editor.image || editor.converting) return;
     editor.converting = true;
@@ -225,9 +255,11 @@
     const image = context.getImageData(0, 0, WIDTH, HEIGHT);
     const pixels = image.data;
     const useDither = elements.dither.checked;
+    const cleanWhites = elements['clean-whites'].checked;
     const errors = useDither ? new Float32Array(WIDTH * HEIGHT * 3) : null;
     const packed = new Uint8Array(FRAME_BYTES);
     const palette = enabledColors();
+    const counts = [0, 0, 0, 0];
 
     for (let y = 0; y < HEIGHT; y++) {
       for (let x = 0; x < WIDTH; x++) {
@@ -237,14 +269,18 @@
         const r = Math.max(0, Math.min(255, pixels[rgba] + (errors ? errors[error] : 0)));
         const g = Math.max(0, Math.min(255, pixels[rgba + 1] + (errors ? errors[error + 1] : 0)));
         const b = Math.max(0, Math.min(255, pixels[rgba + 2] + (errors ? errors[error + 2] : 0)));
-        const color = nearestColor(r, g, b, palette);
+        const neutralRange = Math.max(r, g, b) - Math.min(r, g, b);
+        const protectedPaper = cleanWhites && Math.min(r, g, b) >= 185 && neutralRange <= 22 &&
+          palette.some(item => item.code === 1);
+        const color = protectedPaper ? COLORS[1] : nearestColor(r, g, b, palette);
+        counts[color.code]++;
         pixels[rgba] = color.rgb[0];
         pixels[rgba + 1] = color.rgb[1];
         pixels[rgba + 2] = color.rgb[2];
         pixels[rgba + 3] = 255;
         packed[pixel >> 2] |= color.code << (6 - (pixel & 3) * 2);
 
-        if (errors) {
+        if (errors && !protectedPaper) {
           const er = r - color.rgb[0];
           const eg = g - color.rgb[1];
           const eb = b - color.rgb[2];
@@ -269,25 +305,16 @@
 
     context.putImageData(image, 0, 0);
     editor.packed = packed;
-    editor.crc = crc32(packed);
+    editor.crc = RoggenCoreProcessing.crc32(packed);
     editor.converting = false;
     elements['convert-button'].disabled = false;
     elements['download-button'].disabled = false;
     elements['send-button'].disabled = !isConnected();
     elements['crc-label'].textContent = `CRC ${hex32(editor.crc)}`;
+    elements['pigment-counts'].textContent = COLORS.map(color =>
+      `${color.name} ${(counts[color.code] * 100 / (WIDTH * HEIGHT)).toFixed(1)}%`).join(' · ');
     elements['canvas-overlay'].textContent = useDither ? 'Dithered' : 'Quantized';
     setStatus('Image ready to send', 100);
-  }
-
-  function crc32(bytes) {
-    let crc = 0xffffffff;
-    for (const value of bytes) {
-      crc ^= value;
-      for (let bit = 0; bit < 8; bit++) {
-        crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-      }
-    }
-    return (crc ^ 0xffffffff) >>> 0;
   }
 
   function hex32(value) {
@@ -329,10 +356,12 @@
     ble.control = null;
     ble.data = null;
     ble.statusCharacteristic = null;
+    ble.batteryCharacteristic = null;
     ble.notifications = false;
     ble.transferring = false;
     elements['device-name'].textContent = 'No tag connected';
     elements['device-detail'].textContent = 'Wake your tag, then connect';
+    elements['battery-level'].textContent = 'Unavailable';
     elements['connect-button'].textContent = 'Connect tag';
     elements['connect-button'].disabled = false;
     elements['send-button'].disabled = true;
@@ -360,7 +389,7 @@
     setStatus('Choose EPHOTO-648 in the Bluetooth prompt…', 0);
     try {
       const device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'EPHOTO-648' }],
+        filters: [{ name: 'RoggenCore' }, { name: 'EPHOTO-648' }],
         optionalServices: [SERVICE_UUID]
       });
       ble.device = device;
@@ -400,6 +429,15 @@
       parseStatus(await withTimeout(
         ble.statusCharacteristic.readValue(), 5000, 'Initial status read timed out'
       ));
+      try {
+        ble.batteryCharacteristic = await service.getCharacteristic(BATTERY_UUID);
+        const battery = await ble.batteryCharacteristic.readValue();
+        const millivolts = battery.getUint16(0, true);
+        const approximatePercent = RoggenCoreProcessing.approximateBatteryPercent(millivolts);
+        elements['battery-level'].textContent = `${(millivolts / 1000).toFixed(2)} V · about ${approximatePercent}%`;
+      } catch (_) {
+        elements['battery-level'].textContent = 'Unavailable on this firmware';
+      }
       elements['device-detail'].textContent = ble.notifications
         ? 'Connected and ready'
         : 'Connected and ready (polling status)';
@@ -543,8 +581,18 @@
       setStatus('Verifying image checksum…', 100);
       await writeWithResponse(ble.control, new Uint8Array([2]));
       await waitForStatus(status => status.state === 3 || status.state === 4 || status.state === 5, 5000);
-      setStatus('Refreshing the e-paper display…', 100);
-      await waitForStatus(status => status.state === 5, 120000);
+      elements['cancel-button'].hidden = true;
+      const refreshStarted = performance.now();
+      const refreshMessage = setInterval(() => {
+        const seconds = Math.round((performance.now() - refreshStarted) / 1000);
+        setStatus(`Refreshing display · ${seconds}s elapsed · do not remove power`, 100);
+      }, 1000);
+      setStatus('Refreshing display · do not remove power', 100);
+      try {
+        await waitForStatus(status => status.state === 5, 120000);
+      } finally {
+        clearInterval(refreshMessage);
+      }
       if (ble.status.crc !== editor.crc) throw new Error('The tag completed with an unexpected CRC.');
       setStatus('Done — your new picture is on the frame', 100);
       showToast('Transfer complete. The e-paper will retain this image without power.');
@@ -580,6 +628,7 @@
   }
 
   elements['image-input'].addEventListener('change', () => loadImage(elements['image-input'].files[0]));
+  elements['welcome-image'].addEventListener('click', loadWelcomeImage);
   for (const eventName of ['dragenter', 'dragover']) {
     elements['drop-zone'].addEventListener(eventName, event => {
       event.preventDefault();
@@ -663,8 +712,23 @@
       drawSource();
       markDirty('Palette changed — convert again to apply it.');
     }
+    savePreferences();
   }));
-  elements.dither.addEventListener('change', () => editor.image && markDirty('Dithering changed — convert again to apply it.'));
+  function savePreferences() {
+    const colors = [...document.querySelectorAll('[data-color]')].filter(input => input.checked).map(input => Number(input.dataset.color));
+    localStorage.setItem('roggencore-studio-preferences', JSON.stringify({ dither: elements.dither.checked, cleanWhites: elements['clean-whites'].checked, colors }));
+  }
+  try {
+    const preferences = JSON.parse(localStorage.getItem('roggencore-studio-preferences') || 'null');
+    if (preferences) {
+      elements.dither.checked = preferences.dither !== false;
+      elements['clean-whites'].checked = preferences.cleanWhites !== false;
+      if (Array.isArray(preferences.colors) && preferences.colors.length)
+        document.querySelectorAll('[data-color]').forEach(input => { input.checked = preferences.colors.includes(Number(input.dataset.color)); });
+    }
+  } catch (_) { /* Ignore damaged local preferences. */ }
+  elements.dither.addEventListener('change', () => { savePreferences(); if (editor.image) markDirty('Dithering changed — convert again to apply it.'); });
+  elements['clean-whites'].addEventListener('change', () => { savePreferences(); if (editor.image) markDirty('White cleanup changed — convert again to apply it.'); });
   elements['reset-button'].addEventListener('click', () => resetTransform());
   elements['convert-button'].addEventListener('click', convertImage);
   elements['download-button'].addEventListener('click', downloadFrame);
