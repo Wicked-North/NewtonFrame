@@ -7,7 +7,7 @@ A dependency-free static web app for preparing and transferring 648×480 BWRY im
 - Local image decoding—photos are never uploaded to a server
 - Fill or contain framing, drag positioning, zoom, rotation, and mirroring
 - Selectable black, paper, yellow, and red pigments
-- Optional Floyd–Steinberg error-diffusion dithering
+- Selectable Floyd–Steinberg, Atkinson, Sierra Lite, and Bayer 4×4 dithering
 - Exact 2-bpp panel packing and IEEE CRC-32
 - BLE transfer with offset acknowledgements, cancellation, CRC validation, and progress
 - Packed `.bin` download when Bluetooth is unavailable

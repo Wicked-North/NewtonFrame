@@ -31,8 +31,41 @@
     return millivolts >= 1500 && millivolts <= 3800 ? millivolts : null;
   }
 
+  const DIFFUSION_KERNELS = Object.freeze({
+    'floyd-steinberg': Object.freeze([
+      Object.freeze([1, 0, 7 / 16]), Object.freeze([-1, 1, 3 / 16]),
+      Object.freeze([0, 1, 5 / 16]), Object.freeze([1, 1, 1 / 16])
+    ]),
+    atkinson: Object.freeze([
+      Object.freeze([1, 0, 1 / 8]), Object.freeze([2, 0, 1 / 8]),
+      Object.freeze([-1, 1, 1 / 8]), Object.freeze([0, 1, 1 / 8]),
+      Object.freeze([1, 1, 1 / 8]), Object.freeze([0, 2, 1 / 8])
+    ]),
+    'sierra-lite': Object.freeze([
+      Object.freeze([1, 0, 1 / 2]), Object.freeze([-1, 1, 1 / 4]),
+      Object.freeze([0, 1, 1 / 4])
+    ])
+  });
+
+  const BAYER_4X4 = Object.freeze([
+    Object.freeze([0, 8, 2, 10]),
+    Object.freeze([12, 4, 14, 6]),
+    Object.freeze([3, 11, 1, 9]),
+    Object.freeze([15, 7, 13, 5])
+  ]);
+
+  function diffusionKernel(mode) {
+    return DIFFUSION_KERNELS[mode] || null;
+  }
+
+  function orderedDitherOffset(mode, x, y) {
+    if (mode !== 'bayer-4x4') return 0;
+    return ((BAYER_4X4[y & 3][x & 3] + 0.5) / 16 - 0.5) * 64;
+  }
+
   function snapArtworkToBlackPaper(pixels, width, height, preserveRects = []) {
-    if (pixels.length !== width * height * 4) throw new RangeError('RGBA buffer size does not match its dimensions.');
+    if (pixels.length !== width * height * 4)
+      throw new RangeError('RGBA buffer size does not match its dimensions.');
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         if (preserveRects.some(rect => x >= rect.x && x < rect.x + rect.width &&
@@ -49,7 +82,10 @@
     return pixels;
   }
 
-  const api = { crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus, snapArtworkToBlackPaper };
+  const api = {
+    crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus,
+    diffusionKernel, orderedDitherOffset, snapArtworkToBlackPaper
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RoggenCoreProcessing = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

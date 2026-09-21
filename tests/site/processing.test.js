@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus, snapArtworkToBlackPaper } = require('../../site/processing.js');
+const {
+  crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus,
+  diffusionKernel, orderedDitherOffset, snapArtworkToBlackPaper
+} = require('../../site/processing.js');
 
 test('CRC-32 matches the IEEE check vector', () => {
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926);
@@ -25,6 +28,22 @@ test('battery voltage uses the RoggenCore 1.1.1 status extension', () => {
   assert.equal(batteryMillivoltsFromStatus(current), 3190);
   current.setUint16(12, 0, true);
   assert.equal(batteryMillivoltsFromStatus(current), null);
+});
+
+test('error-diffusion modes expose their expected kernels', () => {
+  assert.equal(diffusionKernel('floyd-steinberg').reduce((sum, item) => sum + item[2], 0), 1);
+  assert.equal(diffusionKernel('atkinson').reduce((sum, item) => sum + item[2], 0), 0.75);
+  assert.equal(diffusionKernel('sierra-lite').reduce((sum, item) => sum + item[2], 0), 1);
+  assert.equal(diffusionKernel('none'), null);
+  assert.equal(diffusionKernel('bayer-4x4'), null);
+});
+
+test('Bayer 4x4 offsets form a centered 16-level threshold map', () => {
+  const offsets = [];
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) offsets.push(orderedDitherOffset('bayer-4x4', x, y));
+  assert.equal(new Set(offsets).size, 16);
+  assert.equal(offsets.reduce((sum, value) => sum + value, 0), 0);
+  assert.equal(orderedDitherOffset('none', 0, 0), 0);
 });
 
 test('welcome artwork snaps antialias shades without changing pigment swatches', () => {

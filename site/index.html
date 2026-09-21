@@ -120,11 +120,19 @@
           </div>
         </fieldset>
 
-        <label class="switch-row" for="dither">
-          <span><strong>Floyd–Steinberg dither</strong><small>Mix pigments for richer photographic detail</small></span>
-          <input id="dither" type="checkbox" checked disabled>
-          <i aria-hidden="true"></i>
-        </label>
+        <fieldset>
+          <legend>Dithering</legend>
+          <label class="select-row" for="dither-mode">
+            <span><strong>Technique</strong><small>Try different patterns for photos, artwork, or text</small></span>
+            <select id="dither-mode" disabled>
+              <option value="none">None — clean graphics</option>
+              <option value="floyd-steinberg" selected>Floyd–Steinberg — balanced</option>
+              <option value="atkinson">Atkinson — light and crisp</option>
+              <option value="sierra-lite">Sierra Lite — sharp detail</option>
+              <option value="bayer-4x4">Bayer 4×4 — regular pattern</option>
+            </select>
+          </label>
+        </fieldset>
 
         <label class="switch-row" for="clean-whites">
           <span><strong>Clean whites</strong><small>Keep bright neutral areas free of colored dither speckles</small></span>
@@ -200,12 +208,12 @@
 
   <footer>
     <span>RoggenCore Studio</span>
-    <span>Build 2026.09.21.9 · Images never leave your device.</span>
+    <span>Build 2026.09.21.10 · Images never leave your device.</span>
     <a href="https://github.com/Wicked-North/NewtonFrame">Source &amp; firmware</a>
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="processing.js?v=20260921-9" defer></script>
-  <script src="app.js?v=20260921-9" defer></script>
+  <script src="processing.js?v=20260921-10" defer></script>
+  <script src="app.js?v=20260921-10" defer></script>
 </body>
 </html>

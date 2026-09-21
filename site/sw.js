@@ -1,4 +1,4 @@
-const CACHE_NAME = 'roggencore-studio-v11';
+const CACHE_NAME = 'roggencore-studio-v12';
 const APP_SHELL = ['./', './index.html', './styles.css', './processing.js', './app.js', './roggencore-splash.png', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {

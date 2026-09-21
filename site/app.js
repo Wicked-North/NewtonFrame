@@ -42,7 +42,7 @@
   const elements = Object.fromEntries([
     'browser-badge', 'compatibility', 'install-button', 'image-input', 'drop-zone', 'welcome-image',
     'change-image', 'canvas-shell', 'canvas-overlay', 'preview', 'drag-hint', 'image-name', 'zoom',
-    'zoom-value', 'rotation', 'flip-horizontal', 'flip-vertical', 'dither', 'clean-whites',
+    'zoom-value', 'rotation', 'flip-horizontal', 'flip-vertical', 'dither-mode', 'clean-whites',
     'reset-button', 'convert-button', 'download-button', 'connect-button',
     'send-button', 'cancel-button', 'device-name', 'device-detail', 'status-text',
     'progress-label', 'progress-bar', 'crc-label', 'tag-state', 'accepted-offset',
@@ -103,7 +103,7 @@
 
   function setEditorEnabled(enabled) {
     for (const item of [elements.zoom, elements.rotation, elements['flip-horizontal'],
-      elements['flip-vertical'], elements.dither, elements['clean-whites'], elements['reset-button'], elements['convert-button']]) {
+      elements['flip-vertical'], elements['dither-mode'], elements['clean-whites'], elements['reset-button'], elements['convert-button']]) {
       item.disabled = !enabled;
     }
   }
@@ -239,9 +239,10 @@
 
     const image = context.getImageData(0, 0, WIDTH, HEIGHT);
     const pixels = image.data;
-    const useDither = elements.dither.checked;
+    const ditherMode = elements['dither-mode'].value;
+    const diffusionKernel = RoggenCoreProcessing.diffusionKernel(ditherMode);
     const cleanWhites = elements['clean-whites'].checked;
-    const errors = useDither ? new Float32Array(WIDTH * HEIGHT * 3) : null;
+    const errors = diffusionKernel ? new Float32Array(WIDTH * HEIGHT * 3) : null;
     const packed = new Uint8Array(FRAME_BYTES);
     const palette = enabledColors();
     const counts = [0, 0, 0, 0];
@@ -257,7 +258,13 @@
         const neutralRange = Math.max(r, g, b) - Math.min(r, g, b);
         const protectedPaper = cleanWhites && Math.min(r, g, b) >= 185 && neutralRange <= 22 &&
           palette.some(item => item.code === 1);
-        const color = protectedPaper ? COLORS[1] : nearestColor(r, g, b, palette);
+        const orderedOffset = protectedPaper ? 0 : RoggenCoreProcessing.orderedDitherOffset(ditherMode, x, y);
+        const color = protectedPaper ? COLORS[1] : nearestColor(
+          Math.max(0, Math.min(255, r + orderedOffset)),
+          Math.max(0, Math.min(255, g + orderedOffset)),
+          Math.max(0, Math.min(255, b + orderedOffset)),
+          palette
+        );
         counts[color.code]++;
         pixels[rgba] = color.rgb[0];
         pixels[rgba + 1] = color.rgb[1];
@@ -265,7 +272,7 @@
         pixels[rgba + 3] = 255;
         packed[pixel >> 2] |= color.code << (6 - (pixel & 3) * 2);
 
-        if (errors && !protectedPaper) {
+        if (diffusionKernel && !protectedPaper) {
           const er = r - color.rgb[0];
           const eg = g - color.rgb[1];
           const eb = b - color.rgb[2];
@@ -276,10 +283,7 @@
             errors[target + 1] += eg * weight;
             errors[target + 2] += eb * weight;
           };
-          spread(x + 1, y, 7 / 16);
-          spread(x - 1, y + 1, 3 / 16);
-          spread(x, y + 1, 5 / 16);
-          spread(x + 1, y + 1, 1 / 16);
+          for (const [dx, dy, weight] of diffusionKernel) spread(x + dx, y + dy, weight);
         }
       }
       if (y % 24 === 23) {
@@ -298,7 +302,7 @@
     elements['crc-label'].textContent = `CRC ${hex32(editor.crc)}`;
     elements['pigment-counts'].textContent = COLORS.map(color =>
       `${color.name} ${(counts[color.code] * 100 / (WIDTH * HEIGHT)).toFixed(1)}%`).join(' · ');
-    elements['canvas-overlay'].textContent = useDither ? 'Dithered' : 'Quantized';
+    elements['canvas-overlay'].textContent = elements['dither-mode'].selectedOptions[0].textContent;
     setStatus('Image ready to send', 100);
   }
 
@@ -710,18 +714,20 @@
   }));
   function savePreferences() {
     const colors = [...document.querySelectorAll('[data-color]')].filter(input => input.checked).map(input => Number(input.dataset.color));
-    localStorage.setItem('roggencore-studio-preferences', JSON.stringify({ dither: elements.dither.checked, cleanWhites: elements['clean-whites'].checked, colors }));
+    localStorage.setItem('roggencore-studio-preferences', JSON.stringify({ ditherMode: elements['dither-mode'].value, cleanWhites: elements['clean-whites'].checked, colors }));
   }
   try {
     const preferences = JSON.parse(localStorage.getItem('roggencore-studio-preferences') || 'null');
     if (preferences) {
-      elements.dither.checked = preferences.dither !== false;
+      const savedMode = preferences.ditherMode || (preferences.dither === false ? 'none' : 'floyd-steinberg');
+      if ([...elements['dither-mode'].options].some(option => option.value === savedMode))
+        elements['dither-mode'].value = savedMode;
       elements['clean-whites'].checked = preferences.cleanWhites !== false;
       if (Array.isArray(preferences.colors) && preferences.colors.length)
         document.querySelectorAll('[data-color]').forEach(input => { input.checked = preferences.colors.includes(Number(input.dataset.color)); });
     }
   } catch (_) { /* Ignore damaged local preferences. */ }
-  elements.dither.addEventListener('change', () => { savePreferences(); if (editor.image) markDirty('Dithering changed — convert again to apply it.'); });
+  elements['dither-mode'].addEventListener('change', () => { savePreferences(); if (editor.image) markDirty('Dithering changed — convert again to apply it.'); });
   elements['clean-whites'].addEventListener('change', () => { savePreferences(); if (editor.image) markDirty('White cleanup changed — convert again to apply it.'); });
   elements['reset-button'].addEventListener('click', () => resetTransform());
   elements['convert-button'].addEventListener('click', convertImage);
