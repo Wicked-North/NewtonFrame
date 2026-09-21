@@ -57,11 +57,10 @@ public sealed partial class Esp32BridgeClient : IDisposable
     {
         await using var stream = File.OpenRead(path);
         using var form = new MultipartFormDataContent();
-        form.Add(new StringContent("0"), "flash_up_file_offset");
         var file = new StreamContent(stream);
         file.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
         form.Add(file, "flash_file_direct", Path.GetFileName(path));
-        using var response = await _http.PostAsync("flash_file_direct", form, cancellationToken);
+        using var response = await _http.PostAsync("flash_file_direct?flash_up_file_offset=0", form, cancellationToken);
         var text = await response.Content.ReadAsStringAsync(cancellationToken);
         response.EnsureSuccessStatusCode();
         EnsureNoBridgeError(text);
@@ -69,13 +68,29 @@ public sealed partial class Esp32BridgeClient : IDisposable
 
     public async Task UploadBinaryAsync(string path, uint offset, CancellationToken cancellationToken = default)
     {
-        await using var stream = File.OpenRead(path);
+        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        await UploadBytesAsync(bytes, offset, cancellationToken);
+    }
+
+    public async Task UploadBytesAsync(ReadOnlyMemory<byte> bytes, uint offset,
+        CancellationToken cancellationToken = default)
+    {
+        const int chunkSize = 256;
+        for (var position = 0; position < bytes.Length; position += chunkSize)
+        {
+            var count = Math.Min(chunkSize, bytes.Length - position);
+            await UploadChunkAsync(bytes.Slice(position, count), offset + (uint)position, cancellationToken);
+        }
+    }
+
+    private async Task UploadChunkAsync(ReadOnlyMemory<byte> bytes, uint offset,
+        CancellationToken cancellationToken)
+    {
         using var form = new MultipartFormDataContent();
-        form.Add(new StringContent(offset.ToString("X")), "flash_up_file_offset");
-        var file = new StreamContent(stream);
+        var file = new ByteArrayContent(bytes.ToArray());
         file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        form.Add(file, "flash_file_direct", Path.GetFileName(path));
-        using var response = await _http.PostAsync("flash_file_direct", form, cancellationToken);
+        form.Add(file, "flash_file_direct", "chunk.bin");
+        using var response = await _http.PostAsync($"flash_file_direct?flash_up_file_offset={offset:X}", form, cancellationToken);
         var text = await response.Content.ReadAsStringAsync(cancellationToken);
         response.EnsureSuccessStatusCode();
         EnsureNoBridgeError(text);
@@ -89,6 +104,23 @@ public sealed partial class Esp32BridgeClient : IDisposable
         if (bytes.Length != flashSize) throw new IOException($"Expected {flashSize} flash bytes, received {bytes.Length}.");
         progress?.Report(new("Reading flash", 100, "Flash download complete"));
         return bytes;
+    }
+
+    public async Task UploadRecoveryImageAsync(FirmwarePackage package, IProgress<OperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var blank = Enumerable.Repeat((byte)0xFF, package.Manifest.FlashSize).ToArray();
+        var image = IntelHexImage.Parse(await File.ReadAllTextAsync(package.HexPath, cancellationToken));
+        var expected = image.ApplyTo(blank);
+        var pages = package.Manifest.AllowedRanges.SelectMany(range => Enumerable.Range((int)(range.Start / 0x400),
+                (int)((range.Length + 0x3FF) / 0x400)))
+            .Distinct().Order().ToArray();
+        for (var index = 0; index < pages.Length; index++)
+        {
+            var address = pages[index] * 0x400;
+            progress?.Report(new("Uploading recovery image", 35 + index * 25d / pages.Length, $"Page 0x{address:X5}"));
+            await UploadBytesAsync(expected.AsMemory(address, 0x400), (uint)address, cancellationToken);
+        }
     }
 
     public async Task<byte[]> DumpUicrAsync(IProgress<OperationProgress>? progress = null,

@@ -90,13 +90,7 @@ void setup()
   swd_begin();
   glitcher_begin();
   init_web();
-  const uint32_t swd_id = nrf_begin();
-  Serial.printf("SWD Id: 0x%08x\r\n", swd_id);
-  if (swd_id == 0x2ba01477 && is_nrf_connected() == 2)
-  {
-    write_register(0xE000EDF0, 0xA05F0000, true);
-    Serial.println("nRF CPU released after startup probe");
-  }
+  Serial.println("RoggenCore bridge ready; SWD target left untouched");
 
 #ifdef ENABLE_OTA
   ArduinoOTA.begin();

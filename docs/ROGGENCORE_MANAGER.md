@@ -33,6 +33,8 @@ Select a cataloged backup and choose **Restore selected backup** to roll back. M
 
 The manager creates a backup, erases only manifest-approved pages, uploads the HEX, reads all flash, verifies every byte, and only then resets and releases the nRF52811.
 
+Firmware bytes are sent as bounded 256-byte binary writes rather than one long multipart transfer. The ESP32 does not probe or release the SWD target during its own startup; each Manager operation explicitly acquires SWD and read-only operations resume the CPU afterward. A reset or failed upload therefore cannot start a partially written application.
+
 ## Factory recovery
 
 Factory recovery clears APPROTECT and all target flash/UICR. It is only allowed with a recovery-capable package containing MBR/S112, RoggenCore, and profile-specific UICR defaults. The operation requires a target-specific typed phrase and a second confirmation. If the target is already readable, a backup is created first. After installation, the manager runs hardware diagnostics and creates the new last-known-good backup.

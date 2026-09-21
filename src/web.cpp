@@ -748,7 +748,11 @@ void init_web()
           upload_failed = false;
           buffer.clear();
 
-          if (request->hasParam("flash_up_file_offset"), true)
+          if (request->hasParam("flash_up_file_offset"))
+          {
+            flash_offset = hstol(request->getParam("flash_up_file_offset")->value());
+          }
+          else if (request->hasParam("flash_up_file_offset", true))
           {
             flash_offset = hstol(request->getParam("flash_up_file_offset", true)->value());
           }

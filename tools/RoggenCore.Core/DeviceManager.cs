@@ -15,8 +15,10 @@ public sealed class DeviceManager(AppStorage storage)
                                                    await bridge.ReadRegisterAsync(0x10000014, cancellationToken))) : 0;
         var boardWord = unlocked ? await bridge.ReadRegisterAsync(0x10001088, cancellationToken) : 0u;
         var model = part == 0x00052811 && boardWord == 0x58031700 ? "EL060H6W4A · 4-color" : "Unknown panel";
-        return new DeviceInfo(swdId, part, ((ulong)id1 << 32) | id0, flashSize, unlocked, boardWord,
+        var device = new DeviceInfo(swdId, part, ((ulong)id1 << 32) | id0, flashSize, unlocked, boardWord,
             model, model.StartsWith("EL060") ? 648 : 0, model.StartsWith("EL060") ? 480 : 0);
+        if (unlocked) await bridge.ResetAndRunAsync(cancellationToken);
+        return device;
     }
 
     public async Task<BackupRecord> BackupAsync(Esp32BridgeClient bridge, DeviceInfo device,
@@ -24,6 +26,8 @@ public sealed class DeviceManager(AppStorage storage)
         IProgress<OperationProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         if (!device.IsUnlocked || device.FlashSize <= 0) throw new InvalidOperationException("An unlocked target is required for backup.");
+        if (await bridge.InitializeAsync(cancellationToken) != device.SwdId || !await bridge.IsUnlockedAsync(cancellationToken))
+            throw new InvalidOperationException("Target changed or became unavailable before backup.");
         var id = $"{device.DeviceId:X16}-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}Z";
         var directory = Path.Combine(storage.BackupsDirectory, id);
         Directory.CreateDirectory(directory);
@@ -55,6 +59,7 @@ public sealed class DeviceManager(AppStorage storage)
         };
         state.LastBridgeAddress = bridge.BaseUri.GetLeftPart(UriPartial.Authority);
         await storage.SaveStateAsync(state, cancellationToken);
+        await bridge.ResetAndRunAsync(cancellationToken);
         progress?.Report(new("Backup", 100, "CRC-32 and SHA-256 recorded"));
         return record;
     }
@@ -63,6 +68,8 @@ public sealed class DeviceManager(AppStorage storage)
         DeviceInfo device, IProgress<OperationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        if (await bridge.InitializeAsync(cancellationToken) != device.SwdId || !await bridge.IsUnlockedAsync(cancellationToken))
+            throw new InvalidOperationException("Target changed or became unavailable before diagnostics.");
         var results = new List<DiagnosticResult>
         {
             new("SWD identity", device.SwdId == 0x2BA01477, $"0x{device.SwdId:X8}"),
@@ -91,6 +98,7 @@ public sealed class DeviceManager(AppStorage storage)
             else
                 results.Add(new("Full flash SHA-256", true, sha));
         }
+        await bridge.ResetAndRunAsync(cancellationToken);
         return results;
     }
 
@@ -101,6 +109,8 @@ public sealed class DeviceManager(AppStorage storage)
         if (!device.IsUnlocked) throw new InvalidOperationException("Target must be unlocked before installation.");
         if (device.Part.ToString("X8") != package.Manifest.TargetPart || device.FlashSize != package.Manifest.FlashSize)
             throw new InvalidOperationException("Firmware package does not match this target.");
+        if (await bridge.InitializeAsync(cancellationToken) != device.SwdId || !await bridge.IsUnlockedAsync(cancellationToken))
+            throw new InvalidOperationException("Target changed or became unavailable before installation.");
         var baselineBytes = await File.ReadAllBytesAsync(baseline.FlashFile, cancellationToken);
         var image = IntelHexImage.Parse(await File.ReadAllTextAsync(package.HexPath, cancellationToken));
         var ranges = package.Manifest.AllowedRanges.OrderBy(item => item.Start).ToArray();
@@ -117,7 +127,12 @@ public sealed class DeviceManager(AppStorage storage)
                 throw new IOException($"Page erase failed: {response}");
         }
         progress?.Report(new("Uploading firmware", 30, package.Manifest.Name));
-        await bridge.UploadHexAsync(package.HexPath, cancellationToken);
+        for (var index = 0; index < pages.Length; index++)
+        {
+            var address = pages[index] * 0x400;
+            progress?.Report(new("Uploading firmware", 30 + index * 25d / pages.Length, $"Page 0x{address:X5}"));
+            await bridge.UploadBytesAsync(expected.AsMemory(address, 0x400), (uint)address, cancellationToken);
+        }
         progress?.Report(new("Verifying firmware", 60, "Reading all target flash"));
         var actual = await bridge.DownloadFlashAsync(device.FlashSize, progress, cancellationToken);
         if (!actual.AsSpan().SequenceEqual(expected))
@@ -168,10 +183,10 @@ public sealed class DeviceManager(AppStorage storage)
         }
 
         progress?.Report(new("Uploading recovery image", 35, package.Manifest.Name));
-        await bridge.UploadHexAsync(package.HexPath, cancellationToken);
         var blank = Enumerable.Repeat((byte)0xFF, package.Manifest.FlashSize).ToArray();
         var image = IntelHexImage.Parse(await File.ReadAllTextAsync(package.HexPath, cancellationToken));
         var expected = image.ApplyTo(blank);
+        await bridge.UploadRecoveryImageAsync(package, progress, cancellationToken);
         progress?.Report(new("Verifying recovery", 65, "Reading all target flash"));
         var actual = await bridge.DownloadFlashAsync(package.Manifest.FlashSize, progress, cancellationToken);
         if (!actual.AsSpan().SequenceEqual(expected))
@@ -188,6 +203,8 @@ public sealed class DeviceManager(AppStorage storage)
     {
         if (!device.IsUnlocked || backup.DeviceId != device.DeviceId || backup.FlashSize != device.FlashSize)
             throw new InvalidOperationException("Backup does not match the connected unlocked target.");
+        if (await bridge.InitializeAsync(cancellationToken) != device.SwdId || !await bridge.IsUnlockedAsync(cancellationToken))
+            throw new InvalidOperationException("Target changed or became unavailable before rollback.");
         var image = await File.ReadAllBytesAsync(backup.FlashFile, cancellationToken);
         if (image.Length != device.FlashSize || Crc32.Compute(image) != backup.FlashCrc32 ||
             !Convert.ToHexString(SHA256.HashData(image)).Equals(backup.FlashSha256, StringComparison.OrdinalIgnoreCase))
