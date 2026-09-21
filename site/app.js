@@ -11,13 +11,6 @@
   const BATTERY_UUID = '7b1e0004-6e8a-4f4b-a2b7-2c648480e001';
   const CHUNK_BYTES = 16;
   const ACK_INTERVAL = 256;
-  const REPOSITORY_URL = 'https://github.com/Wicked-North/NewtonFrame';
-  const REPOSITORY_QR = [
-    '0000000000','0000000000','07f2a331fc','0415c14104','05d7503174','05d455d574','05d25c7174','04105bad04','07f55555fc','00044cc800',
-    '0417b68b38','04e07bb870','009cbe5658','00226fe5f4','05de62a5c0','01632327bc','009f4f53f8','05600452b4','00973a56e4','056b8d4930',
-    '00faafbfb4','0240dcd17c','039531a6ec','07c8c008f0','0477308268','04c56cd3fc','07373447c8','0007a7ac54','07f02e5d50','0411133c74',
-    '05d114f7e4','05d1912ef4','05d17a8afc','04105110f0','07f5ab1e88','0000000000','0000000000'
-  ];
 
   const COLORS = [
     { code: 0, name: 'Black', rgb: [23, 23, 23] },
@@ -225,57 +218,15 @@
     image.src = editor.objectUrl;
   }
 
-  function loadWelcomeImage() {
-    const canvas = document.createElement('canvas');
-    canvas.width = WIDTH;
-    canvas.height = HEIGHT;
-    const paint = canvas.getContext('2d');
-    paint.fillStyle = 'rgb(245, 240, 210)';
-    paint.fillRect(0, 0, WIDTH, HEIGHT);
-    paint.fillStyle = 'rgb(23, 23, 23)';
-    paint.fillRect(54, 48, 540, 8);
-    paint.font = '700 72px Segoe UI, sans-serif';
-    paint.textAlign = 'center';
-    paint.fillText('ROGGENCORE', WIDTH / 2, 158);
-    paint.font = '26px Segoe UI, sans-serif';
-    paint.fillText('YOUR PAPER. YOUR PICTURES.', WIDTH / 2, 205);
-    paint.textAlign = 'left';
-    paint.font = '700 27px Segoe UI, sans-serif';
-    paint.fillText('OPEN SOURCE', 64, 285);
-    paint.font = '21px Segoe UI, sans-serif';
-    paint.fillText('Firmware · Studio · Recovery', 64, 322);
-    paint.font = '16px Segoe UI, sans-serif';
-    paint.fillText(REPOSITORY_URL.replace('https://', ''), 64, 354);
-    const colors = ['rgb(23,23,23)', 'rgb(245,240,210)', 'rgb(228,189,45)', 'rgb(181,45,54)'];
-    colors.forEach((color, index) => {
-      paint.fillStyle = color;
-      paint.fillRect(64 + index * 58, 390, 42, 42);
-      paint.strokeStyle = 'rgb(23,23,23)';
-      paint.strokeRect(64 + index * 58, 390, 42, 42);
-    });
-    const moduleSize = 3;
-    const qrX = 465;
-    const qrY = 260;
-    paint.fillStyle = 'rgb(245, 240, 210)';
-    paint.fillRect(qrX, qrY, REPOSITORY_QR.length * moduleSize, REPOSITORY_QR.length * moduleSize);
-    paint.fillStyle = 'rgb(23, 23, 23)';
-    REPOSITORY_QR.forEach((row, y) => {
-      const bits = BigInt(`0x${row}`);
-      for (let x = 0; x < REPOSITORY_QR.length; x++) {
-        if ((bits & (1n << BigInt(REPOSITORY_QR.length - 1 - x))) !== 0n)
-          paint.fillRect(qrX + x * moduleSize, qrY + y * moduleSize, moduleSize, moduleSize);
-      }
-    });
-    paint.textAlign = 'center';
-    paint.font = '700 16px Segoe UI, sans-serif';
-    paint.fillText('SCAN FOR SOURCE', qrX + REPOSITORY_QR.length * moduleSize / 2, 398);
-    const welcomePixels = paint.getImageData(0, 0, WIDTH, HEIGHT);
-    RoggenCoreProcessing.snapArtworkToBlackPaper(welcomePixels.data, WIDTH, HEIGHT,
-      [{ x: 63, y: 389, width: 218, height: 44 }]);
-    paint.putImageData(welcomePixels, 0, 0);
-    canvas.toBlob(blob => {
-      if (blob) loadImage(new File([blob], 'RoggenCore-welcome.png', { type: 'image/png' }));
-    }, 'image/png');
+  async function loadWelcomeImage() {
+    try {
+      const response = await fetch('roggencore-splash.png?v=20260921-9');
+      if (!response.ok) throw new Error(`Splash image request failed (${response.status})`);
+      const blob = await response.blob();
+      await loadImage(new File([blob], 'RoggenCore-welcome.png', { type: 'image/png' }));
+    } catch (error) {
+      showToast(`Could not load the welcome image: ${error.message}`);
+    }
   }
 
   async function convertImage() {
