@@ -22,6 +22,7 @@ project(epaper_ble_receiver C ASM)
 
 add_executable(epaper_ble_receiver
   src/main.c
+  src/led_indicator.c
   src/panel.c
   ${SDK}/modules/nrfx/mdk/gcc_startup_nrf52810.S
   ${SDK}/modules/nrfx/mdk/system_nrf52810.c

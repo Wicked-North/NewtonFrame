@@ -14,6 +14,7 @@ Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 - Wakes and advertises again when either active-low button candidate P0.28 or P0.29 is pressed.
 - Disconnects and enters System OFF after a successful display refresh.
 - Hardware testing has verified S112 startup, advertising, GATT connection, a complete 77,760-byte image transfer, CRC validation, panel refresh, intentional disconnect, post-transfer System OFF, and physical-button wake into a fresh advertising window.
+- Hardware-verified, battery-friendly RGB indicators use short pulses: blue every 3 seconds while advertising, two green connection flashes, yellow every second during transfer, green every 2 seconds during refresh, and a 300 ms green completion pulse. All channels are off in System OFF.
 
 ## Memory layout
 

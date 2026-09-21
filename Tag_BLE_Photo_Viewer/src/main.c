@@ -12,6 +12,7 @@
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
 #include "nrf_soc.h"
+#include "led_indicator.h"
 #include "panel.h"
 
 #define DEVICE_NAME "EPHOTO-648"
@@ -74,8 +75,10 @@ static volatile bool m_abort_pending;
 static volatile bool m_disconnect_pending;
 static volatile bool m_system_off_pending;
 static bool m_shutdown_after_disconnect;
+static bool m_complete_indicator_pending;
 
 static void enter_system_off(void) {
+    led_indicator_off();
     nrf_gpio_cfg_sense_input(WAKE_BUTTON_1,
                              NRF_GPIO_PIN_PULLUP,
                              NRF_GPIO_PIN_SENSE_LOW);
@@ -151,6 +154,7 @@ static void status_publish(void) {
 static void fail(transfer_error_t error) {
     m_state = STATE_ERROR;
     m_error = error;
+    led_indicator_off();
     status_publish();
 }
 
@@ -170,6 +174,7 @@ static void handle_control(uint8_t const *data, uint16_t length) {
         m_expected_offset = 0;
         m_expected_crc = read_le32(&data[12]);
         m_running_crc = 0xFFFFFFFFu;
+        m_complete_indicator_pending = false;
         status_publish();
         m_prepare_pending = true;
         return;
@@ -187,6 +192,7 @@ static void handle_control(uint8_t const *data, uint16_t length) {
             return;
         }
         m_state = STATE_REFRESHING;
+        led_indicator_refreshing();
         status_publish();
         m_finish_pending = true;
         return;
@@ -197,6 +203,7 @@ static void handle_control(uint8_t const *data, uint16_t length) {
         m_error = ERROR_NONE;
         m_expected_offset = 0;
         m_running_crc = 0xFFFFFFFFu;
+        led_indicator_off();
         m_abort_pending = true;
         status_publish();
         return;
@@ -338,6 +345,7 @@ static void advertising_init(void) {
 
 static void advertising_start(void) {
     APP_ERROR_CHECK(sd_ble_gap_adv_start(m_adv_handle, APP_BLE_CONN_CFG_TAG));
+    led_indicator_advertising();
 }
 
 static void ble_evt_handler(ble_evt_t const *event, void *context) {
@@ -345,12 +353,14 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
     switch (event->header.evt_id) {
         case BLE_GAP_EVT_CONNECTED:
             m_conn_handle = event->evt.gap_evt.conn_handle;
+            led_indicator_connected();
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
             m_status_notifications = false;
             m_disconnect_pending = false;
+            m_complete_indicator_pending = false;
             if (m_shutdown_after_disconnect) {
                 m_shutdown_after_disconnect = false;
                 m_system_off_pending = true;
@@ -366,6 +376,7 @@ static void ble_evt_handler(ble_evt_t const *event, void *context) {
 
         case BLE_GAP_EVT_ADV_SET_TERMINATED:
             if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
+                led_indicator_off();
                 m_system_off_pending = true;
             }
             break;
@@ -439,6 +450,7 @@ void assert_nrf_callback(uint16_t line_num, uint8_t const *file_name) {
 int main(void) {
     nrf_gpio_cfg_input(WAKE_BUTTON_1, NRF_GPIO_PIN_PULLUP);
     nrf_gpio_cfg_input(WAKE_BUTTON_2, NRF_GPIO_PIN_PULLUP);
+    led_indicator_init();
 
     APP_ERROR_CHECK(nrf_sdh_enable_request());
     uint32_t ram_start = 0;
@@ -459,6 +471,7 @@ int main(void) {
             m_prepare_pending = false;
             if (panel_begin_stream()) {
                 m_state = STATE_RECEIVING;
+                led_indicator_transferring();
                 status_publish();
             } else {
                 fail(ERROR_PANEL_TIMEOUT);
@@ -469,20 +482,22 @@ int main(void) {
             if (panel_finish_stream()) {
                 m_state = STATE_COMPLETE;
                 status_publish();
-                if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
-                    if (m_status_notifications) {
-                        m_disconnect_pending = true;
-                    } else {
-                        m_shutdown_after_disconnect = true;
-                        APP_ERROR_CHECK(sd_ble_gap_disconnect(
-                            m_conn_handle,
-                            BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION));
-                    }
-                } else {
-                    m_system_off_pending = true;
-                }
+                led_indicator_complete();
+                m_complete_indicator_pending = true;
             } else {
                 fail(ERROR_PANEL_TIMEOUT);
+            }
+        }
+        if (m_complete_indicator_pending && led_indicator_complete_done()) {
+            m_complete_indicator_pending = false;
+            if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
+                m_disconnect_pending = false;
+                m_shutdown_after_disconnect = true;
+                APP_ERROR_CHECK(sd_ble_gap_disconnect(
+                    m_conn_handle,
+                    BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION));
+            } else {
+                m_system_off_pending = true;
             }
         }
         if (m_system_off_pending) {
