@@ -60,7 +60,7 @@ RoggenCore uses Nordic nRF5 SDK 17.1.0 and S112 7.2.0. It advertises as `RoggenC
 
 Use [RoggenCore Studio](https://wicked-north.github.io/NewtonFrame/) to crop, rotate, mirror, quantize, dither, download, and send images. On iPhone, Web Bluetooth requires a compatible browser such as Bluefy; Safari does not expose Web Bluetooth.
 
-For upgrades, use `firmware/RoggenCore/1.1.0/upgrade-manifest.json`. For factory unlock/conversion, use the recovery manifest only through RoggenCore Manager after reviewing its warnings. The manager records timestamped full-flash/UICR backups and will not boot a mismatched readback.
+For upgrades, use the latest `firmware/RoggenCore/<version>/upgrade-manifest.json`. For factory unlock/conversion, use the matching recovery manifest only through RoggenCore Manager after reviewing its warnings. The manager records timestamped full-flash/UICR backups and will not boot a mismatched readback.
 
 ## Safety
 

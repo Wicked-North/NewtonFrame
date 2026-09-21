@@ -5,7 +5,7 @@ Experimental ESP32-free receiver for the SoluM/Newton M3 648 × 480 BWRY tag.
 ## Current status
 
 - Builds against Nordic nRF5 SDK 17.1.0 and S112 7.2.0.
-- Version 1.1.0 advertises as `RoggenCore`; Studio also accepts legacy `EPHOTO-648` builds.
+- Version 1.1.1 advertises as `RoggenCore`; Studio also accepts legacy `EPHOTO-648` builds.
 - Implements the Control, Data, and Status characteristics from [`../docs/BLE_PHOTO_PROTOCOL.md`](../docs/BLE_PHOTO_PROTOCOL.md).
 - Validates image dimensions, format, offsets, length, and CRC-32.
 - Streams accepted image bytes directly into UC8159 display RAM.

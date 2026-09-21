@@ -25,7 +25,13 @@
     return Math.max(0, Math.min(100, Math.round((millivolts - 2500) / 7)));
   }
 
-  const api = { crc32, packPixels, approximateBatteryPercent };
+  function batteryMillivoltsFromStatus(dataView) {
+    if (!dataView || dataView.byteLength < 14) return null;
+    const millivolts = dataView.getUint16(12, true);
+    return millivolts >= 1500 && millivolts <= 3800 ? millivolts : null;
+  }
+
+  const api = { crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RoggenCoreProcessing = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

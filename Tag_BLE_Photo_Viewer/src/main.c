@@ -126,11 +126,13 @@ static uint32_t crc32_update(uint32_t crc, uint8_t const *data, uint16_t length)
 }
 
 static void status_publish(void) {
-    uint8_t value[12] = {PROTOCOL_VERSION, (uint8_t)m_state, 0, 0};
+    uint8_t value[14] = {PROTOCOL_VERSION, (uint8_t)m_state, 0, 0};
     value[2] = (uint8_t)m_error;
     value[3] = (uint8_t)((uint16_t)m_error >> 8);
     write_le32(&value[4], m_expected_offset);
     write_le32(&value[8], m_running_crc ^ 0xFFFFFFFFu);
+    value[12] = (uint8_t)m_battery_mv;
+    value[13] = (uint8_t)(m_battery_mv >> 8);
 
     ble_gatts_value_t gatts_value = {
         .len = sizeof(value),
@@ -266,7 +268,7 @@ static void photo_characteristic_add(uint16_t uuid,
                                      bool notify,
                                      uint16_t max_length,
                                      ble_gatts_char_handles_t *handles) {
-    uint8_t initial_value[12] = {0};
+    uint8_t initial_value[16] = {0};
     ble_uuid_t ble_uuid = {.uuid = uuid, .type = m_uuid_type};
     ble_gatts_char_md_t char_md;
     ble_gatts_attr_md_t attr_md;
@@ -314,7 +316,7 @@ static void services_init(void) {
 
     photo_characteristic_add(PHOTO_UUID_CONTROL, true, false, false, false, 16u, &m_control_handles);
     photo_characteristic_add(PHOTO_UUID_DATA, true, true, false, false, 20u, &m_data_handles);
-    photo_characteristic_add(PHOTO_UUID_STATUS, false, false, true, true, 12u, &m_status_handles);
+    photo_characteristic_add(PHOTO_UUID_STATUS, false, false, true, true, 14u, &m_status_handles);
     photo_characteristic_add(PHOTO_UUID_BATTERY, false, false, true, false, 2u, &m_battery_handles);
     status_publish();
     battery_publish();

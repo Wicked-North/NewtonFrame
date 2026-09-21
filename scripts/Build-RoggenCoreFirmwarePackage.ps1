@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.1.0',
+    [string]$Version = '1.1.1',
     [string]$SdkRoot = "$PSScriptRoot\..\.toolchains\nRF5_SDK_17.1.0_ddde560\nRF5_SDK_17.1.0_ddde560",
     [string]$ArmGccRoot = "$env:USERPROFILE\.platformio\packages\toolchain-gccarmnoneeabi",
     [string]$OutputRoot = "$PSScriptRoot\..\firmware\RoggenCore"

@@ -99,7 +99,7 @@ The sender uses Write Without Response for image data, pauses every 256 image by
 
 ## Status message
 
-Fixed 12-byte notification:
+RoggenCore 1.1.1 sends a 14-byte notification. The first 12 bytes are unchanged from earlier firmware, so existing clients remain compatible:
 
 | Offset | Size | Field |
 |---:|---:|---|
@@ -108,6 +108,7 @@ Fixed 12-byte notification:
 | 2 | 2 | Error code |
 | 4 | 4 | Next expected byte offset |
 | 8 | 4 | Running/final CRC-32 |
+| 12 | 2 | Supply voltage in millivolts, little-endian (1.1.1+) |
 
 States:
 
@@ -123,7 +124,7 @@ States:
 
 Initial error codes include invalid header, wrong offset, too much data, CRC mismatch, panel timeout, and transfer timeout.
 
-RoggenCore 1.1.0 also exposes optional read-only characteristic `7b1e0004-6e8a-4f4b-a2b7-2c648480e001`. Its two-byte little-endian value is the supply voltage in millivolts sampled at boot. Clients must treat it as optional for compatibility with earlier firmware.
+RoggenCore also exposes optional read-only characteristic `7b1e0004-6e8a-4f4b-a2b7-2c648480e001`. Its two-byte little-endian value is the same supply voltage sampled at boot. Clients should prefer the status extension as a fallback when a phone caches the older GATT layout and hides this characteristic.
 
 ## iPhone transport
 

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { crc32, packPixels, approximateBatteryPercent } = require('../../site/processing.js');
+const { crc32, packPixels, approximateBatteryPercent, batteryMillivoltsFromStatus } = require('../../site/processing.js');
 
 test('CRC-32 matches the IEEE check vector', () => {
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926);
@@ -15,4 +15,14 @@ test('battery estimate is clamped and monotonic', () => {
   assert.equal(approximateBatteryPercent(2400), 0);
   assert.equal(approximateBatteryPercent(2850), 50);
   assert.equal(approximateBatteryPercent(3300), 100);
+});
+
+test('battery voltage uses the RoggenCore 1.1.1 status extension', () => {
+  const legacy = new DataView(new ArrayBuffer(12));
+  assert.equal(batteryMillivoltsFromStatus(legacy), null);
+  const current = new DataView(new ArrayBuffer(14));
+  current.setUint16(12, 3190, true);
+  assert.equal(batteryMillivoltsFromStatus(current), 3190);
+  current.setUint16(12, 0, true);
+  assert.equal(batteryMillivoltsFromStatus(current), null);
 });
